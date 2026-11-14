@@ -31,6 +31,7 @@ class FakeSupervisor:
             "wpa_passphrase": "ap-secret-placeholder",
         }
         self.wifi_connected = False
+        self.mac_available = True
         self.wifi_ssid: str | None = None
         self.ethernet_subnet = ethernet_subnet
         self.stopped: list[str] = []
@@ -81,7 +82,7 @@ class FakeSupervisor:
                 {
                     "interface": "wlan0",
                     "type": "wireless",
-                    "mac": "de:ad:be:ef:00:01",
+                    "mac": "de:ad:be:ef:00:01" if self.mac_available else None,
                     "connected": self.wifi_connected,
                     "wifi": (
                         {"mode": "infrastructure", "ssid": self.wifi_ssid}
@@ -100,6 +101,8 @@ class FakeSupervisor:
 
     async def get_device_mac(self, interface: str) -> str:
         assert interface == "wlan0"
+        if not self.mac_available:
+            raise NetworkManagerError("NetworkManager did not report a MAC.")
         return "de:ad:be:ef:00:01"
 
     async def find_autoconnecting_wifi_profiles(
@@ -555,6 +558,35 @@ async def test_ap_fallback_matches_device_bssid_separator(tmp_path) -> None:
 
     assert device.wifi_write is not None
     assert device.wifi_write[0].bssid == "de-ad-be-ef-00-01"
+
+
+@pytest.mark.asyncio
+async def test_ap_fallback_sends_minimal_profile_when_metadata_is_missing(
+    tmp_path,
+) -> None:
+    supervisor = FakeSupervisor()
+    supervisor.mac_available = False
+    supervisor.ap_options.pop("channel")
+    device = FakeDevice(wifi_list=[])
+    workflow, _, _, journal = make_workflow(
+        tmp_path, supervisor=supervisor, device=device
+    )
+    session_id = await start_scan(workflow)
+
+    result = await workflow.provision(
+        session_id=session_id,
+        device_ssid="Meross_SETUP_1234",
+        device_bssid="aa:bb:cc:dd:ee:ff",
+        target_ssid="HA-AP",
+        target_password="iot-only-test-password",
+    )
+
+    assert device.wifi_write is not None
+    assert device.wifi_write[0].bssid == ""
+    assert device.wifi_write[0].channel == 0
+    assert "only the SSID and password" in result.message
+    assert supervisor.addon_state == "started"
+    assert journal.read() is None
 
 
 @pytest.mark.asyncio

@@ -17,7 +17,7 @@ def test_app_manifests_are_consistent_and_least_privileged() -> None:
     dockerfile = (APP_DIR / "Dockerfile").read_text(encoding="utf-8")
 
     assert app["slug"] == "meross_provisioner"
-    assert app["version"] == "0.1.15"
+    assert app["version"] == "0.1.16"
     project = tomllib.loads(
         (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     )

@@ -173,16 +173,19 @@ def build_wifi_payload(
     network: DeviceWifiNetwork, password: str
 ) -> dict[str, dict[str, str | int]]:
     """Build the Wi-Fi-only SET payload; no cloud/MQTT key is included."""
-    return {
-        "wifi": {
-            "ssid": encode_wifi_text(network.ssid),
-            "password": encode_wifi_text(password),
-            "bssid": network.bssid,
-            "channel": network.channel,
-            "cipher": network.cipher,
-            "encryption": network.encryption,
-        }
+    wifi: dict[str, str | int] = {
+        "ssid": encode_wifi_text(network.ssid),
+        "password": encode_wifi_text(password),
+        "cipher": network.cipher,
+        "encryption": network.encryption,
     }
+    # Some firmware accepts a minimal profile and discovers the AP by SSID;
+    # omit fields that the AP app could not expose instead of sending guesses.
+    if network.bssid:
+        wifi["bssid"] = network.bssid
+    if network.channel > 0:
+        wifi["channel"] = network.channel
+    return {"wifi": wifi}
 
 
 def is_supported_model(model: str) -> bool:

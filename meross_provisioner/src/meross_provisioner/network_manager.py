@@ -88,10 +88,29 @@ class NetworkManagerClient:
 
     async def get_device_mac(self, interface: str) -> str:
         """Read the hardware address even while the AP app owns the device."""
-        output = await self._run(
-            "--get-values", "GENERAL.HWADDR", "device", "show", interface
-        )
+        output = ""
+        with contextlib.suppress(NetworkManagerError):
+            output = await self._run(
+                "--get-values", "GENERAL.HWADDR", "device", "show", interface
+            )
         mac = output.strip().replace("-", ":").casefold()
+        if not _BSSID_RE.fullmatch(mac):
+            try:
+                output = await self._run(
+                    "--terse",
+                    "--fields",
+                    "GENERAL.HWADDR",
+                    "device",
+                    "show",
+                    interface,
+                )
+            except NetworkManagerError:
+                output = ""
+            for line in output.splitlines():
+                key, separator, value = line.partition(":")
+                if separator and key == "GENERAL.HWADDR":
+                    mac = value.strip().replace("-", ":").casefold()
+                    break
         if not _BSSID_RE.fullmatch(mac):
             raise NetworkManagerError(
                 "NetworkManager did not report a valid MAC address for the "

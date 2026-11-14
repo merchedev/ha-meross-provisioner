@@ -166,6 +166,24 @@ def test_wifi_list_preserves_device_reported_metadata() -> None:
     ]
 
 
+def test_wifi_payload_omits_unknown_bssid_and_channel() -> None:
+    network = DeviceWifiNetwork(
+        ssid="HA-AP",
+        bssid="",
+        channel=0,
+        signal=0,
+        cipher=3,
+        encryption=6,
+    )
+
+    payload = build_wifi_payload(network, "a-private-test-passphrase")
+
+    assert "bssid" not in payload["wifi"]
+    assert "channel" not in payload["wifi"]
+    assert payload["wifi"]["cipher"] == 3
+    assert payload["wifi"]["encryption"] == 6
+
+
 def test_wifi_payload_contains_only_wifi_configuration() -> None:
     network = DeviceWifiNetwork(
         ssid="HA-AP",

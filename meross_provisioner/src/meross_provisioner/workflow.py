@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
 import logging
 import re
@@ -521,6 +522,7 @@ class ProvisioningWorkflow:
                     "2.4 GHz coverage and try again. If the target is the AP "
                     "managed by this app, verify that its SSID matches exactly."
                 )
+            minimal_target = not wifi_network.bssid or wifi_network.channel == 0
             await device.set_wifi(wifi_network, target_password)
             result = ProvisioningResult(
                 model=info.model,
@@ -530,6 +532,13 @@ class ProvisioningWorkflow:
                 target_ssid=target_ssid,
                 message=(
                     "The device acknowledged its Wi-Fi configuration and is restarting."
+                    + (
+                        " The AP app did not expose its channel or MAC, so only "
+                        "the SSID and password were sent; check that the device "
+                        "joins."
+                        if minimal_target
+                        else ""
+                    )
                 ),
             )
         except BaseException as err:
@@ -717,6 +726,8 @@ class ProvisioningWorkflow:
         ):
             return None
         channel = _optional_int(options.get("channel"))
+        if channel is None:
+            channel = _channel_from_overrides(options.get("hostapd_config_override"))
         if channel is not None and not 1 <= channel <= 13:
             channel = None
         hidden_value = options.get("hide_ssid")
@@ -725,12 +736,27 @@ class ProvisioningWorkflow:
             "true",
             "yes",
         }
-        try:
+        bssid: str | None = None
+        with contextlib.suppress(NetworkManagerError):
             bssid = await self._network_manager.get_device_mac(
                 self._config.wifi_interface
             )
-        except NetworkManagerError:
-            bssid = None
+        if bssid is None:
+            try:
+                network = await self._supervisor.get_network_info()
+                bssid = _interface_mac(network, self._config.wifi_interface)
+            except SupervisorError:
+                pass
+        missing: list[str] = []
+        if channel is None:
+            missing.append("channel")
+        if bssid is None:
+            missing.append("MAC")
+        if missing:
+            _LOGGER.warning(
+                "AP app metadata missing: %s; a minimal profile will be used",
+                ", ".join(missing),
+            )
         return AccessPointConfig(
             ssid=ssid,
             channel=channel,
@@ -822,17 +848,16 @@ class ProvisioningWorkflow:
                 "The target AP is configured as hidden. Disable 'Hide SSID' "
                 "in the AP app before provisioning."
             )
-        if config.channel is None or config.bssid is None:
-            raise DeviceProtocolError(
-                "Provisioner could not read the AP app's channel and MAC. "
-                "Check the AP app options and try again."
-            )
         # The AP app creates a WPA2-PSK network; these are the values Meross
         # setup firmware expects for that security mode.
         return DeviceWifiNetwork(
             ssid=target_ssid,
-            bssid=config.bssid.replace(":", bssid_separator),
-            channel=config.channel,
+            bssid=(
+                config.bssid.replace(":", bssid_separator)
+                if config.bssid is not None
+                else ""
+            ),
+            channel=config.channel or 0,
             signal=0,
             cipher=3,
             encryption=6,
@@ -927,6 +952,33 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _channel_from_overrides(value: Any) -> int | None:
+    if not isinstance(value, list):
+        return None
+    for line in value:
+        if not isinstance(line, str):
+            continue
+        key, separator, raw = line.partition("=")
+        if separator and key.strip().casefold() == "channel":
+            return _optional_int(raw.strip())
+    return None
+
+
+def _interface_mac(network: dict[str, Any], interface: str) -> str | None:
+    interfaces = network.get("interfaces", [])
+    if not isinstance(interfaces, list):
+        return None
+    for item in interfaces:
+        if not isinstance(item, dict) or item.get("interface") != interface:
+            continue
+        mac = item.get("mac")
+        if not isinstance(mac, str):
+            return None
+        candidate = mac.replace("-", ":").casefold()
+        return candidate if _BSSID_RE.fullmatch(candidate) else None
+    return None
 
 
 def _bssid_separator(networks: list[DeviceWifiNetwork]) -> str:

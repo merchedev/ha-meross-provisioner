@@ -32,6 +32,8 @@ Inicia el complemento y abre **Open Web UI**. El preflight es de solo lectura: v
 
 Si el SSID de destino coincide con el de la app AP configurada, es normal que el Meross no lo vea durante la configuración: ese AP está detenido. Provisioner lee el SSID, el canal y la visibilidad desde las opciones de la app AP, y usa la MAC de la interfaz para enviar la configuración. Después restaura el AP. La app AP debe tener el SSID visible; los AP ocultos se rechazan con un mensaje explícito.
 
+Si la app AP no expone el canal o la MAC de la interfaz, Provisioner envía un perfil mínimo con el SSID y la contraseña y lo indica en el resultado. En ese caso comprueba que el dispositivo obtiene una concesión DHCP; si no aparece, revisa las opciones de la app AP o el registro del complemento.
+
 Si cierras la pantalla durante el escaneo, la sesión caduca y Provisioner intenta restaurar el AP automáticamente. También puedes usar **Cancelar y restaurar HA-AP**.
 
 ## Seguridad y limitaciones

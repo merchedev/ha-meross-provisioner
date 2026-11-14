@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.16
+
+- Fall back to terse `nmcli` output and Supervisor network data when reading the AP interface MAC.
+- Read the AP channel from `hostapd_config_override` when the app option is absent.
+- Send a minimal SSID/password profile instead of refusing when the AP app does not expose its channel or MAC.
+- Report in the result when only the minimal profile was used.
+
 ## 0.1.15
 
 - Add a show/hide control for the target Wi-Fi password.

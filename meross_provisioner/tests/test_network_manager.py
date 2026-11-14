@@ -52,6 +52,25 @@ async def test_device_mac_is_read_even_when_ap_app_owns_interface() -> None:
 
 
 @pytest.mark.asyncio
+async def test_device_mac_falls_back_to_terse_output() -> None:
+    client = NetworkManagerClient()
+    calls = 0
+
+    async def fake_run(*args: str, **kwargs: object) -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise NetworkManagerError("unsupported field")
+        return "GENERAL.HWADDR:DE:AD:BE:EF:00:01"
+
+    client._run = fake_run
+    mac = await client.get_device_mac("wlan0")
+
+    assert mac == "de:ad:be:ef:00:01"
+    assert calls == 2
+
+
+@pytest.mark.asyncio
 async def test_device_mac_rejects_invalid_output() -> None:
     client = NetworkManagerClient()
 

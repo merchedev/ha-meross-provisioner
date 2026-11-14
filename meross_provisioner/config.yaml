@@ -1,6 +1,6 @@
 name: Meross Provisioner
 slug: meross_provisioner
-version: 0.1.15
+version: 0.1.16
 description: Configure Meross Wi-Fi devices locally from Home Assistant
 url: https://github.com/merchedev/ha-meross-provisioner
 arch:
