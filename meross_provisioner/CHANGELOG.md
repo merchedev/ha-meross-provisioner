@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.13
+
+- Retry the initial setup request while the Meross HTTP endpoint starts.
+- Close each device HTTP connection after the response for embedded-server compatibility.
+- Report the transport error class and errno when the setup AP is unreachable.
+
 ## 0.1.12
 
 - Create the temporary setup profile as a truly open Wi-Fi network.

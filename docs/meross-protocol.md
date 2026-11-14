@@ -16,6 +16,8 @@ The main operations used by this project are:
 | `Appliance.Config.WifiList` | `GET` | Read Wi-Fi networks visible to the Meross device, including BSSID/channel/security metadata. |
 | `Appliance.Config.Wifi` | `SET` | Set the selected Wi-Fi network. The device normally reboots after accepting it. |
 
+The embedded setup HTTP server can become reachable a few seconds after DHCP completes. The client therefore retries only the read (`GET`) requests with a bounded delay and closes each HTTP connection after the response. A failed `SET` is not retried automatically, because the device may have accepted it before the connection failed.
+
 `Appliance.Config.Key` is intentionally not part of the initial flow. It is associated with the Meross MQTT endpoint/account or a private MQTT setup and is not needed for the Wi-Fi-only provisioning attempt. Device-control keys and MQTT binding are a separate project decision.
 
 The app makes no Meross cloud requests, but omitting `Appliance.Config.Key` is not proof that every device firmware stays offline after joining Wi-Fi. Record observed network behavior per model/firmware. Do not claim strict cloud isolation until it has been verified or enforced by the user's network policy.

@@ -255,8 +255,10 @@ async def _recover_on_startup(app: web.Application) -> None:
     workflow = app[WORKFLOW_KEY]
     if workflow is None:
         device_session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=8),
+            timeout=aiohttp.ClientTimeout(total=15),
             headers={"Content-Type": "application/json"},
+            # The embedded setup server does not reliably support keep-alive.
+            connector=aiohttp.TCPConnector(force_close=True),
         )
         app[DEVICE_SESSION_KEY] = device_session
         supervisor = app[SUPERVISOR_KEY]
