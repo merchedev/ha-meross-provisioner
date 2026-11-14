@@ -13,7 +13,7 @@ def test_app_manifests_are_consistent_and_least_privileged() -> None:
     dockerfile = (APP_DIR / "Dockerfile").read_text(encoding="utf-8")
 
     assert app["slug"] == "meross_provisioner"
-    assert app["version"] == "0.1.1"
+    assert app["version"] == "0.1.2"
     assert set(app["arch"]) == {"aarch64", "amd64"}
     assert app["ingress"] is True
     assert app["hassio_api"] is True
@@ -24,7 +24,11 @@ def test_app_manifests_are_consistent_and_least_privileged() -> None:
         "FROM ghcr.io/home-assistant/base-python:3.14-alpine3.24"
     )
     assert "python -m pip install" in dockerfile
+    assert 'RUN python -c "import meross_provisioner.web"' in dockerfile
     assert not (APP_DIR / "build.yaml").exists()
+
+    run_script = (APP_DIR / "run.sh").read_text(encoding="utf-8")
+    assert 'export PYTHONPATH="/app/src${PYTHONPATH:+:$PYTHONPATH}"' in run_script
 
 
 def test_repository_metadata_matches_the_online_addon_repository() -> None:

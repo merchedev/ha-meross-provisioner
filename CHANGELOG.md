@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 — fix package discovery at runtime
+
+- Export the application source path in the startup script.
+- Fail the image build if the Python package cannot be imported.
+- Bump the app version so Home Assistant rebuilds the image.
+
 ## 0.1.1 — use a Python-enabled Home Assistant base image
 
 - Pin the app image to Home Assistant's Python base image.

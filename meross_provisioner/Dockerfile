@@ -10,6 +10,7 @@ COPY requirements.txt ./requirements.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 
 COPY src/ ./src/
+RUN python -c "import meross_provisioner.web"
 COPY run.sh ./run.sh
 RUN chmod a+x ./run.sh
 
