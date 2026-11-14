@@ -36,10 +36,11 @@ class FakeSupervisor:
                     "interface": "wlan0",
                     "type": "wireless",
                     "connected": self.wifi_connected,
-                    "wifi": {
-                        "mode": "infrastructure" if self.wifi_ssid else "ap",
-                        "ssid": self.wifi_ssid or "HA-AP",
-                    },
+                    "wifi": (
+                        {"mode": "infrastructure", "ssid": self.wifi_ssid}
+                        if self.wifi_ssid
+                        else None
+                    ),
                 },
             ]
         }
@@ -208,6 +209,27 @@ async def test_preflight_requires_wired_management_path(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_preflight_lists_wifi_interfaces_seen_by_supervisor(tmp_path) -> None:
+    supervisor = FakeSupervisor()
+    original_get_network_info = supervisor.get_network_info
+
+    async def without_wifi() -> dict:
+        result = await original_get_network_info()
+        result["interfaces"] = [
+            item for item in result["interfaces"] if item["type"] != "wireless"
+        ]
+        return result
+
+    supervisor.get_network_info = without_wifi
+    workflow, _, _, _ = make_workflow(tmp_path, supervisor=supervisor)
+
+    report = await workflow.preflight()
+
+    assert not report.ready
+    assert any("Available Wi-Fi interfaces: none" in issue for issue in report.issues)
+
+
+@pytest.mark.asyncio
 async def test_scan_requires_both_explicit_confirmations(tmp_path) -> None:
     workflow, supervisor, _, _ = make_workflow(tmp_path)
 
@@ -223,14 +245,17 @@ async def test_scan_requires_both_explicit_confirmations(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_preflight_refuses_existing_wifi_profile(tmp_path) -> None:
     supervisor = FakeSupervisor()
-    original_get_interface_info = supervisor.get_interface_info
+    original_get_network_info = supervisor.get_network_info
 
-    async def with_existing_profile(interface: str) -> dict:
-        result = await original_get_interface_info(interface)
-        result["wifi"] = {"mode": "ap", "ssid": "HA-AP"}
+    async def with_existing_profile() -> dict:
+        result = await original_get_network_info()
+        wireless = next(
+            item for item in result["interfaces"] if item["type"] == "wireless"
+        )
+        wireless["wifi"] = {"mode": "ap", "ssid": "HA-AP"}
         return result
 
-    supervisor.get_interface_info = with_existing_profile
+    supervisor.get_network_info = with_existing_profile
     workflow, _, _, _ = make_workflow(tmp_path, supervisor=supervisor)
 
     report = await workflow.preflight()

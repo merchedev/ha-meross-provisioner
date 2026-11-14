@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4 — improve network preflight diagnostics
+
+- Include the failing Supervisor endpoint in safe preflight errors.
+- Report the wireless interfaces visible to the Supervisor before scanning.
+
 ## 0.1.3 — fix Supervisor environment at startup
 
 - Start through S6 `with-contenv` so the Supervisor token reaches the app.

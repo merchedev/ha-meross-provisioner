@@ -169,12 +169,6 @@ class ProvisioningWorkflow:
 
         try:
             network = await self._supervisor.get_network_info()
-            interface = await self._supervisor.get_interface_info(
-                self._config.wifi_interface
-            )
-            addon = await self._supervisor.get_addon_info(
-                self._config.access_point_addon_slug
-            )
         except SupervisorError as err:
             return PreflightReport(
                 ready=False,
@@ -191,6 +185,32 @@ class ProvisioningWorkflow:
         interfaces = network.get("interfaces", [])
         if not isinstance(interfaces, list):
             interfaces = []
+        wireless_interfaces = [
+            item
+            for item in interfaces
+            if isinstance(item, dict) and item.get("type") == "wireless"
+        ]
+        interface = next(
+            (
+                item
+                for item in wireless_interfaces
+                if item.get("interface") == self._config.wifi_interface
+            ),
+            None,
+        )
+        if interface is None:
+            available = (
+                ", ".join(
+                    str(item.get("interface", "?")) for item in wireless_interfaces
+                )
+                or "none"
+            )
+            issues.append(
+                f"The Supervisor network API does not list "
+                f"{self._config.wifi_interface!r}. Available Wi-Fi interfaces: "
+                f"{available}."
+            )
+
         ethernet = next(
             (
                 item
@@ -207,13 +227,7 @@ class ProvisioningWorkflow:
                 "Ethernet before switching its Wi-Fi."
             )
 
-        interface_type = interface.get("type")
-        if interface_type != "wireless":
-            issues.append(
-                f"Configured interface {self._config.wifi_interface!r} is not "
-                "reported as wireless."
-            )
-        wifi_profile = interface.get("wifi")
+        wifi_profile = interface.get("wifi") if interface is not None else None
         current_mode = (
             wifi_profile.get("mode") if isinstance(wifi_profile, dict) else None
         )
@@ -223,7 +237,15 @@ class ProvisioningWorkflow:
                 "cannot safely snapshot and restore it, so it will not replace it."
             )
 
-        addon_state = addon.get("state")
+        addon_state: str | None = None
+        try:
+            addon = await self._supervisor.get_addon_info(
+                self._config.access_point_addon_slug
+            )
+            state = addon.get("state")
+            addon_state = str(state) if state is not None else None
+        except SupervisorError as err:
+            issues.append(str(err))
         if addon_state != "started":
             issues.append(
                 "The configured AP app is not running; refusing a workflow "
@@ -233,7 +255,9 @@ class ProvisioningWorkflow:
         return PreflightReport(
             ready=not issues,
             wifi_interface=self._config.wifi_interface,
-            wifi_interface_type=(str(interface_type) if interface_type else None),
+            wifi_interface_type=(
+                str(interface.get("type")) if interface is not None else None
+            ),
             ethernet_interface=(
                 str(ethernet.get("interface")) if isinstance(ethernet, dict) else None
             ),

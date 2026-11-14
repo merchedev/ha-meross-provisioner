@@ -73,11 +73,12 @@ class SupervisorClient:
 
         if not isinstance(result, dict) or response.status >= 400:
             raise SupervisorError(
-                f"The Supervisor API request failed (HTTP {response.status})."
+                f"The Supervisor API request {method} {path} failed "
+                f"(HTTP {response.status})."
             )
         if result.get("result") != "ok":
             # Do not forward arbitrary API messages; they may contain config values.
-            raise SupervisorError("The Supervisor rejected the requested operation.")
+            raise SupervisorError(f"The Supervisor rejected {method} {path}.")
         data = result.get("data", {})
         if not isinstance(data, dict):
             raise SupervisorError("The Supervisor returned an unexpected data object.")

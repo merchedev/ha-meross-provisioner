@@ -53,6 +53,7 @@ async def test_supervisor_error_message_is_sanitized() -> None:
         await server.close()
 
     assert "sensitive value" not in str(error.value)
+    assert "GET /network/info" in str(error.value)
 
 
 def test_supervisor_client_requires_token() -> None:
