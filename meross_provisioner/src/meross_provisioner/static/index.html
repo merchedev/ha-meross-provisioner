@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="./" />
+    <title>Meross Provisioner</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 0 auto; max-width: 820px; padding: 1rem; line-height: 1.5; }
+      h1 { margin-bottom: .25rem; }
+      .muted { opacity: .8; }
+      .card { border: 1px solid #8886; border-radius: .7rem; padding: 1rem; margin: 1rem 0; }
+      .danger { border-left: .35rem solid #d33; }
+      .ok { border-left: .35rem solid #298b48; }
+      .warn { border-left: .35rem solid #bd7900; }
+      label { display: block; margin: .65rem 0; }
+      input, select, button { font: inherit; max-width: 100%; }
+      input[type="text"], input[type="password"], select { box-sizing: border-box; width: 100%; padding: .55rem; }
+      button { cursor: pointer; padding: .55rem .9rem; margin: .25rem .25rem .25rem 0; }
+      button:disabled { cursor: not-allowed; opacity: .55; }
+      .network { display: flex; gap: .75rem; align-items: center; }
+      .network span:first-child { flex: 1; }
+      #status { white-space: pre-wrap; }
+      .hidden { display: none; }
+      code { overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <h1>Meross Provisioner</h1>
+    <p class="muted">Configuración local experimental desde Home Assistant. No usa la nube Meross.</p>
+
+    <section class="card danger">
+      <strong>Antes de continuar</strong>
+      <p>El proceso interrumpe temporalmente <code>HA-AP</code>. Mantén la Raspberry Pi conectada por Ethernet. La contraseña de destino se transmite al dispositivo por HTTP local sin cifrado. Pon un solo Meross en modo de configuración y comprueba que el SSID seleccionado corresponde a ese dispositivo.</p>
+    </section>
+
+    <section class="card">
+      <h2>1. Comprobación previa</h2>
+      <p id="preflight">Cargando estado…</p>
+      <ul id="warnings"></ul>
+      <p id="addonList" class="muted"></p>
+      <button id="refresh">Volver a comprobar</button>
+    </section>
+
+    <section class="card">
+      <h2>2. Escanear dispositivos Meross</h2>
+      <label><input id="confirmPause" type="checkbox" /> Acepto que el punto de acceso se interrumpa durante el proceso.</label>
+      <label><input id="confirmDedicated" type="checkbox" /> Confirmo que la interfaz Wi‑Fi está dedicada al AP y que no contiene un perfil guardado que necesite conservar.</label>
+      <button id="scan" disabled>Detener temporalmente HA-AP y escanear</button>
+      <div id="deviceSelection" class="hidden">
+        <label for="deviceAp">Punto de acceso de configuración</label>
+        <select id="deviceAp"></select>
+      </div>
+    </section>
+
+    <section id="targetSection" class="card hidden">
+      <h2>3. Configurar la Wi‑Fi de destino</h2>
+      <label for="targetSsid">SSID de destino</label>
+      <input id="targetSsid" type="text" autocomplete="off" maxlength="32" value="HA-AP" />
+      <label for="targetPassword">Contraseña WPA/WPA2 de destino</label>
+      <input id="targetPassword" type="password" autocomplete="new-password" />
+      <p class="muted">La contraseña no se guarda en Home Assistant ni en el navegador. No uses aquí la contraseña de tu red principal.</p>
+      <button id="provision">Configurar este dispositivo</button>
+      <button id="cancel" type="button">Cancelar y restaurar HA-AP</button>
+    </section>
+
+    <section class="card" aria-live="polite">
+      <h2>Estado</h2>
+      <p id="status">Listo.</p>
+    </section>
+
+    <script>
+      const byId = (id) => document.getElementById(id);
+      let sessionId = null;
+      let preflightReady = false;
+      let busy = false;
+
+      function showStatus(message, kind = "") {
+        const node = byId("status");
+        node.textContent = message;
+        node.className = kind;
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(`./api/${path}`, {
+          ...options,
+          headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+          cache: "no-store",
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+        return body;
+      }
+
+      async function refreshPreflight() {
+        byId("scan").disabled = true;
+        byId("preflight").textContent = "Comprobando red y permisos del Supervisor…";
+        byId("warnings").replaceChildren();
+        try {
+          const data = await api("preflight");
+          const session = await api("session");
+          const report = data.preflight;
+          preflightReady = report.ready;
+          byId("preflight").textContent = report.ready
+            ? `Preparado. Wi‑Fi: ${report.wifi_interface}; Ethernet: ${report.ethernet_interface}; AP app: ${report.access_point_addon_slug} (${report.access_point_addon_state}).`
+            : `No se puede continuar:\n• ${report.issues.join("\n• ")}`;
+          for (const warning of report.warnings) {
+            const item = document.createElement("li");
+            item.textContent = warning;
+            byId("warnings").append(item);
+          }
+          const addonData = await api("addons");
+          const addonNames = addonData.addons
+            .map((addon) => `${addon.name} (${addon.slug})`)
+            .join(", ");
+          byId("addonList").textContent = addonNames
+            ? `Apps instaladas (usa el slug del AP en la configuración de esta app): ${addonNames}`
+            : "No se encontraron otras apps instaladas.";
+          if (data.recovery_message) showStatus(data.recovery_message, "warn");
+          if (session.session_active) {
+            showStatus(
+              "Hay una sesión de configuración activa. La red se restaurará automáticamente al caducar; mantén HA conectado por Ethernet.",
+              "warn",
+            );
+          } else if (session.recovery_required) {
+            showStatus(
+              `Se requiere recuperación (${session.recovery_phase}). Inicia el AP desde Home Assistant.`,
+              "danger",
+            );
+          }
+          byId("scan").disabled = !report.ready || busy;
+        } catch (error) {
+          preflightReady = false;
+          byId("preflight").textContent = error.message;
+        }
+      }
+
+      async function scan() {
+        busy = true;
+        byId("scan").disabled = true;
+        byId("deviceSelection").classList.add("hidden");
+        byId("targetSection").classList.add("hidden");
+        showStatus("Deteniendo el AP y buscando redes Meross…");
+        try {
+          const result = await api("scan", {
+            method: "POST",
+            body: JSON.stringify({
+              confirm_ap_interruption: byId("confirmPause").checked,
+              confirm_dedicated_interface: byId("confirmDedicated").checked,
+            }),
+          });
+          sessionId = result.session_id;
+          const selector = byId("deviceAp");
+          selector.replaceChildren();
+          for (const ap of result.access_points) {
+            const option = document.createElement("option");
+            option.value = JSON.stringify({ ssid: ap.ssid, mac: ap.mac });
+            option.textContent = `${ap.ssid} — señal ${ap.signal}% (${ap.mac})`;
+            selector.append(option);
+          }
+          byId("deviceSelection").classList.remove("hidden");
+          byId("targetSection").classList.remove("hidden");
+          showStatus("Redes encontradas. Selecciona el Meross que está en modo de configuración.", "ok");
+        } catch (error) {
+          showStatus(error.message, "danger");
+          await refreshPreflight();
+        } finally {
+          busy = false;
+          byId("scan").disabled = !preflightReady;
+        }
+      }
+
+      async function provision() {
+        if (!sessionId) return;
+        const selected = JSON.parse(byId("deviceAp").value);
+        const passwordField = byId("targetPassword");
+        const payload = {
+          session_id: sessionId,
+          device_ssid: selected.ssid,
+          device_bssid: selected.mac,
+          target_ssid: byId("targetSsid").value,
+          target_password: passwordField.value,
+        };
+        passwordField.value = "";
+        busy = true;
+        byId("provision").disabled = true;
+        byId("cancel").disabled = true;
+        showStatus("Conectando temporalmente a la red de configuración y comprobando el dispositivo…");
+        try {
+          const { job_id: jobId } = await api("provision", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          await watchJob(jobId);
+        } catch (error) {
+          showStatus(error.message, "danger");
+          sessionId = null;
+        } finally {
+          busy = false;
+          byId("provision").disabled = false;
+          byId("cancel").disabled = false;
+          byId("targetSection").classList.add("hidden");
+          sessionId = null;
+          await refreshPreflight();
+        }
+      }
+
+      async function watchJob(jobId) {
+        for (;;) {
+          const job = await api(`jobs/${encodeURIComponent(jobId)}`);
+          if (job.status === "succeeded") {
+            const result = job.result;
+            showStatus(`${result.message}\nModelo: ${result.model} ${result.subtype}\nFirmware: ${result.firmware}\nMAC: ${result.mac_address}\nSSID: ${result.target_ssid}\n\nComprueba la concesión DHCP y añade el dispositivo a la integración local correspondiente.`, "ok");
+            return;
+          }
+          if (job.status === "failed") throw new Error(job.error || "La configuración ha fallado.");
+          showStatus("Configurando… Home Assistant sigue accesible por Ethernet.");
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        }
+      }
+
+      async function cancelSession() {
+        if (!sessionId || busy) return;
+        busy = true;
+        byId("cancel").disabled = true;
+        showStatus("Cancelando y restaurando el punto de acceso…");
+        try {
+          await api("cancel", {
+            method: "POST",
+            body: JSON.stringify({ session_id: sessionId }),
+          });
+          showStatus("HA-AP se ha restaurado.", "ok");
+        } catch (error) {
+          showStatus(error.message, "danger");
+        } finally {
+          sessionId = null;
+          busy = false;
+          byId("cancel").disabled = false;
+          byId("targetSection").classList.add("hidden");
+          await refreshPreflight();
+        }
+      }
+
+      byId("refresh").addEventListener("click", refreshPreflight);
+      byId("scan").addEventListener("click", scan);
+      byId("provision").addEventListener("click", provision);
+      byId("cancel").addEventListener("click", cancelSession);
+      refreshPreflight();
+    </script>
+  </body>
+</html>

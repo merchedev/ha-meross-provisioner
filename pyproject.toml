@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ha-meross-provisioner"
+version = "0.1.0"
+description = "Experimental local Meross Wi-Fi provisioning app for Home Assistant OS"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Meross Provisioner contributors" }]
+dependencies = ["aiohttp>=3.10,<4"]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.14,<2",
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<2",
+  "PyYAML>=6,<7",
+  "ruff>=0.11,<1",
+]
+
+[tool.setuptools]
+package-dir = {"" = "meross_provisioner/src"}
+
+[tool.setuptools.packages.find]
+where = ["meross_provisioner/src"]
+
+[tool.setuptools.package-data]
+meross_provisioner = ["static/*.html"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["meross_provisioner/tests"]
+pythonpath = ["meross_provisioner/src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["meross_provisioner/src", "meross_provisioner/tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "meross_provisioner/src"
+packages = ["meross_provisioner"]
