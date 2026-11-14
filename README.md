@@ -4,7 +4,7 @@
 
 Meross Provisioner is a Home Assistant app that aims to place a Meross device on a chosen Wi-Fi network without the Meross mobile app or Meross cloud. It uses a local connection to a device in setup mode, then asks Home Assistant's Supervisor to restore the configured access-point app.
 
-The initial target is a wired Home Assistant OS installation with a dedicated Wi-Fi interface running a compatible access-point app. A provisioning attempt temporarily interrupts that AP. The wired connection keeps the Home Assistant UI available.
+The initial target is a wired Home Assistant OS installation with a dedicated Wi-Fi interface running a compatible access-point app. A provisioning attempt temporarily interrupts that AP. The wired connection keeps the Home Assistant UI available. The target can be that same AP: Provisioner reads its saved SSID/channel metadata before the outage, sends the configuration, and restores it afterwards.
 
 > This is an independent community project and is not affiliated with Meross. It does not control devices. After provisioning, use Home Assistant's HomeKit Device integration or a suitable local Meross integration. Non-HomeKit devices may need an additional local device key/integration setup; that is not implemented here.
 

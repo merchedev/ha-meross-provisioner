@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.15
+
+- Add a show/hide control for the target Wi-Fi password.
+- Read the configured AP app's SSID, channel, and visibility before stopping it.
+- Configure a device for the managed AP using its saved metadata while that AP is stopped.
+- Reject hidden target APs with a clear error instead of sending a configuration that cannot connect.
+
 ## 0.1.14
 
 - Skip hidden or malformed Wi-Fi scan entries instead of aborting the whole list.

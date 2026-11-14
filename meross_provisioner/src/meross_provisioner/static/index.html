@@ -21,6 +21,9 @@
       button:disabled { cursor: not-allowed; opacity: .55; }
       .network { display: flex; gap: .75rem; align-items: center; }
       .network span:first-child { flex: 1; }
+      .password-row { display: flex; gap: .5rem; align-items: center; }
+      .password-row input { flex: 1; }
+      .password-row button { margin: 0; white-space: nowrap; }
       #status { white-space: pre-wrap; }
       .hidden { display: none; }
       code { overflow-wrap: anywhere; }
@@ -57,10 +60,14 @@
     <section id="targetSection" class="card hidden">
       <h2>3. Configurar la Wi‑Fi de destino</h2>
       <label for="targetSsid">SSID de destino</label>
-      <input id="targetSsid" type="text" autocomplete="off" maxlength="32" value="HA-AP" />
+      <input id="targetSsid" type="text" autocomplete="off" maxlength="32" placeholder="HA-AP" />
       <label for="targetPassword">Contraseña WPA/WPA2 de destino</label>
-      <input id="targetPassword" type="password" autocomplete="new-password" />
-      <p class="muted">La contraseña no se guarda en Home Assistant ni en el navegador. No uses aquí la contraseña de tu red principal.</p>
+      <div class="password-row">
+        <input id="targetPassword" type="password" autocomplete="new-password" />
+        <button id="togglePassword" type="button" aria-label="Mostrar contraseña" aria-pressed="false">Mostrar</button>
+      </div>
+      <p class="muted">La contraseña no se guarda en Home Assistant ni en el navegador. No uses aquí la contraseña de tu red principal. Usa <strong>Mostrar</strong> para comprobarla antes de continuar.</p>
+      <p class="muted">Si el destino es <code>HA-AP</code>, es normal que el Meross no lo vea durante la configuración: el AP está detenido. Provisioner usará el SSID y el canal guardados en la app AP y lo restaurará al terminar.</p>
       <button id="provision">Configurar este dispositivo</button>
       <button id="cancel" type="button">Cancelar y restaurar HA-AP</button>
     </section>
@@ -80,6 +87,18 @@
         const node = byId("status");
         node.textContent = message;
         node.className = kind;
+      }
+
+      function setPasswordVisible(visible) {
+        const field = byId("targetPassword");
+        const button = byId("togglePassword");
+        field.type = visible ? "text" : "password";
+        button.textContent = visible ? "Ocultar" : "Mostrar";
+        button.setAttribute("aria-pressed", String(visible));
+        button.setAttribute(
+          "aria-label",
+          visible ? "Ocultar contraseña" : "Mostrar contraseña",
+        );
       }
 
       async function api(path, options = {}) {
@@ -102,6 +121,10 @@
           const session = await api("session");
           const report = data.preflight;
           preflightReady = report.ready;
+          const targetSsidField = byId("targetSsid");
+          if (report.access_point_ssid && !targetSsidField.value) {
+            targetSsidField.value = report.access_point_ssid;
+          }
           byId("preflight").textContent = report.ready
             ? `Preparado. Wi‑Fi: ${report.wifi_interface}; Ethernet: ${report.ethernet_interface}; AP app: ${report.access_point_addon_slug} (${report.access_point_addon_state}).`
             : `No se puede continuar:\n• ${report.issues.join("\n• ")}`;
@@ -161,6 +184,7 @@
           }
           byId("deviceSelection").classList.remove("hidden");
           byId("targetSection").classList.remove("hidden");
+          setPasswordVisible(false);
           showStatus("Redes encontradas. Selecciona el Meross que está en modo de configuración.", "ok");
         } catch (error) {
           showStatus(error.message, "danger");
@@ -183,6 +207,7 @@
           target_password: passwordField.value,
         };
         passwordField.value = "";
+        setPasswordVisible(false);
         busy = true;
         byId("provision").disabled = true;
         byId("cancel").disabled = true;
@@ -201,6 +226,8 @@
           byId("provision").disabled = false;
           byId("cancel").disabled = false;
           byId("targetSection").classList.add("hidden");
+          byId("targetPassword").value = "";
+          setPasswordVisible(false);
           sessionId = null;
           await refreshPreflight();
         }
@@ -238,6 +265,8 @@
           busy = false;
           byId("cancel").disabled = false;
           byId("targetSection").classList.add("hidden");
+          byId("targetPassword").value = "";
+          setPasswordVisible(false);
           await refreshPreflight();
         }
       }
@@ -246,6 +275,9 @@
       byId("scan").addEventListener("click", scan);
       byId("provision").addEventListener("click", provision);
       byId("cancel").addEventListener("click", cancelSession);
+      byId("togglePassword").addEventListener("click", () => {
+        setPasswordVisible(byId("targetPassword").type === "password");
+      });
       refreshPreflight();
     </script>
   </body>

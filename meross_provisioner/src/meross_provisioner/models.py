@@ -59,6 +59,16 @@ class ProvisioningResult:
 
 
 @dataclass(frozen=True, slots=True)
+class AccessPointConfig:
+    """Non-secret settings of the AP app that Provisioner will restore."""
+
+    ssid: str
+    channel: int | None
+    bssid: str | None
+    hidden: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class ScanSession:
     """Short-lived state while the configured AP app is paused."""
 
@@ -68,6 +78,7 @@ class ScanSession:
     access_points: tuple[AccessPoint, ...]
     created_at: datetime
     suspended_profile_uuids: tuple[str, ...] = ()
+    access_point_config: AccessPointConfig | None = None
 
     def access_point(self, ssid: str, mac: str) -> AccessPoint | None:
         """Find the exact AP selected by the UI, avoiding SSID-only ambiguity."""

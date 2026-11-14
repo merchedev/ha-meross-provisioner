@@ -20,6 +20,8 @@ The embedded setup HTTP server can become reachable a few seconds after DHCP com
 
 The scan response is firmware-dependent: hidden networks can appear with an empty SSID, some builds report SSIDs as plain text or NUL-padded fields, and older firmware uses hyphen-separated BSSIDs. The parser skips entries that cannot be provisioned, accepts both SSID encodings, and sends the BSSID back in the separator format the device reported.
 
+When the target is the access point managed by Provisioner, that AP is stopped while the device is being configured, so it cannot appear in the device's scan. In that case the workflow uses the AP app's saved SSID/channel, the Wi-Fi interface MAC as the BSSID, and the observed WPA2 security values (`cipher=3`, `encryption=6`). The AP app's passphrase is not used or retained; the user supplies the target password. Hidden target APs are rejected because setup firmware cannot discover them reliably.
+
 `Appliance.Config.Key` is intentionally not part of the initial flow. It is associated with the Meross MQTT endpoint/account or a private MQTT setup and is not needed for the Wi-Fi-only provisioning attempt. Device-control keys and MQTT binding are a separate project decision.
 
 The app makes no Meross cloud requests, but omitting `Appliance.Config.Key` is not proof that every device firmware stays offline after joining Wi-Fi. Record observed network behavior per model/firmware. Do not claim strict cloud isolation until it has been verified or enforced by the user's network policy.

@@ -27,6 +27,7 @@ from .journal import TransactionJournal
 from .meross_protocol import is_supported_model
 from .models import (
     AccessPoint,
+    AccessPointConfig,
     DeviceInfo,
     DeviceWifiNetwork,
     ProvisioningResult,
@@ -59,6 +60,8 @@ class NetworkManagerPort(Protocol):
     """Operations for the AP interface, which may be unmanaged by Supervisor."""
 
     async def get_device_info(self, interface: str) -> dict[str, str]: ...
+
+    async def get_device_mac(self, interface: str) -> str: ...
 
     async def find_autoconnecting_wifi_profiles(
         self, interface: str
@@ -122,6 +125,7 @@ class PreflightReport:
     wifi_device_state: str | None
     issues: tuple[str, ...]
     warnings: tuple[str, ...]
+    access_point_ssid: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -134,6 +138,7 @@ class PreflightReport:
             "wifi_device_state": self.wifi_device_state,
             "issues": list(self.issues),
             "warnings": list(self.warnings),
+            "access_point_ssid": self.access_point_ssid,
         }
 
 
@@ -222,6 +227,13 @@ class ProvisioningWorkflow:
                 warnings=tuple(warnings),
             )
 
+        addon_options = addon.get("options")
+        access_point_ssid = None
+        if isinstance(addon_options, dict):
+            candidate_ssid = addon_options.get("ssid")
+            if isinstance(candidate_ssid, str) and candidate_ssid.strip():
+                access_point_ssid = candidate_ssid
+
         interfaces = network.get("interfaces", [])
         if not isinstance(interfaces, list):
             interfaces = []
@@ -280,6 +292,7 @@ class ProvisioningWorkflow:
             wifi_device_state=wifi_device_state,
             issues=tuple(issues),
             warnings=tuple(warnings),
+            access_point_ssid=access_point_ssid,
         )
 
     async def list_addons(self) -> list[dict[str, str]]:
@@ -314,6 +327,8 @@ class ProvisioningWorkflow:
         report = await self.preflight()
         if not report.ready:
             raise SafetyCheckError("Preflight failed: " + " ".join(report.issues))
+
+        access_point_config = await self._read_access_point_config()
 
         async with self._session_lock:
             if self._session is not None or self._busy:
@@ -394,6 +409,7 @@ class ProvisioningWorkflow:
                     access_points=tuple(candidates),
                     created_at=datetime.now(UTC),
                     suspended_profile_uuids=tuple(suspended_uuids),
+                    access_point_config=access_point_config,
                 )
                 self._session = session
                 self._expiry_task = asyncio.create_task(
@@ -491,9 +507,20 @@ class ProvisioningWorkflow:
                     f"Model {info.model!r} is not an initial test target. "
                     "No Wi-Fi settings were written."
                 )
-            wifi_network = self._find_target_network(
-                await device.get_wifi_list(), target_ssid
-            )
+            wifi_networks = await device.get_wifi_list()
+            wifi_network = self._select_target_network(wifi_networks, target_ssid)
+            if wifi_network is None:
+                wifi_network = self._stopped_access_point_network(
+                    session.access_point_config,
+                    target_ssid,
+                    _bssid_separator(wifi_networks),
+                )
+            if wifi_network is None:
+                raise DeviceProtocolError(
+                    "The Meross device cannot see the target SSID. Check its "
+                    "2.4 GHz coverage and try again. If the target is the AP "
+                    "managed by this app, verify that its SSID matches exactly."
+                )
             await device.set_wifi(wifi_network, target_password)
             result = ProvisioningResult(
                 model=info.model,
@@ -662,6 +689,55 @@ class ProvisioningWorkflow:
             last_state,
         )
 
+    async def _read_access_point_config(self) -> AccessPointConfig | None:
+        """Read non-secret AP settings before stopping the managed AP.
+
+        The Supervisor response can also contain the AP passphrase. Only
+        the SSID, channel, visibility, and interface MAC are retained.
+        """
+        try:
+            info = await self._supervisor.get_addon_info(
+                self._config.access_point_addon_slug
+            )
+        except SupervisorError:
+            _LOGGER.warning("Could not read the configured AP settings")
+            return None
+
+        options = info.get("options")
+        if not isinstance(options, dict):
+            return None
+        ssid = options.get("ssid")
+        if not isinstance(ssid, str) or not ssid.strip():
+            return None
+        option_interface = options.get("interface")
+        if (
+            isinstance(option_interface, str)
+            and option_interface.strip()
+            and option_interface.strip() != self._config.wifi_interface
+        ):
+            return None
+        channel = _optional_int(options.get("channel"))
+        if channel is not None and not 1 <= channel <= 13:
+            channel = None
+        hidden_value = options.get("hide_ssid")
+        hidden = hidden_value is True or str(hidden_value).casefold() in {
+            "1",
+            "true",
+            "yes",
+        }
+        try:
+            bssid = await self._network_manager.get_device_mac(
+                self._config.wifi_interface
+            )
+        except NetworkManagerError:
+            bssid = None
+        return AccessPointConfig(
+            ssid=ssid,
+            channel=channel,
+            bssid=bssid,
+            hidden=hidden,
+        )
+
     def _private_gateway(self, gateway: str) -> str:
         if not isinstance(gateway, str) or not gateway:
             raise SafetyCheckError(
@@ -715,15 +791,12 @@ class ProvisioningWorkflow:
             )
 
     @staticmethod
-    def _find_target_network(
+    def _select_target_network(
         networks: list[DeviceWifiNetwork], target_ssid: str
-    ) -> DeviceWifiNetwork:
+    ) -> DeviceWifiNetwork | None:
         matches = [network for network in networks if network.ssid == target_ssid]
         if not matches:
-            raise DeviceProtocolError(
-                "The Meross device cannot see the target SSID. Check its "
-                "2.4 GHz coverage and try again."
-            )
+            return None
         for network in matches:
             if not _BSSID_RE.fullmatch(network.bssid):
                 raise DeviceProtocolError(
@@ -734,6 +807,36 @@ class ProvisioningWorkflow:
                     "The device returned an unsupported Wi-Fi channel."
                 )
         return max(matches, key=lambda network: network.signal)
+
+    @staticmethod
+    def _stopped_access_point_network(
+        config: AccessPointConfig | None,
+        target_ssid: str,
+        bssid_separator: str = ":",
+    ) -> DeviceWifiNetwork | None:
+        """Build target metadata from the AP app while that AP is stopped."""
+        if config is None or config.ssid != target_ssid:
+            return None
+        if config.hidden:
+            raise DeviceProtocolError(
+                "The target AP is configured as hidden. Disable 'Hide SSID' "
+                "in the AP app before provisioning."
+            )
+        if config.channel is None or config.bssid is None:
+            raise DeviceProtocolError(
+                "Provisioner could not read the AP app's channel and MAC. "
+                "Check the AP app options and try again."
+            )
+        # The AP app creates a WPA2-PSK network; these are the values Meross
+        # setup firmware expects for that security mode.
+        return DeviceWifiNetwork(
+            ssid=target_ssid,
+            bssid=config.bssid.replace(":", bssid_separator),
+            channel=config.channel,
+            signal=0,
+            cipher=3,
+            encryption=6,
+        )
 
     async def _restore_ap(
         self,
@@ -815,3 +918,22 @@ class ProvisioningWorkflow:
             raise RecoveryError("Recovery was incomplete: " + "; ".join(errors))
 
         self._journal.clear()
+
+
+def _optional_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _bssid_separator(networks: list[DeviceWifiNetwork]) -> str:
+    """Match the BSSID separator style reported by the device firmware."""
+    for network in networks:
+        if "-" in network.bssid and ":" not in network.bssid:
+            return "-"
+        if ":" in network.bssid:
+            return ":"
+    return ":"

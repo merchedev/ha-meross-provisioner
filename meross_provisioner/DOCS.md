@@ -25,10 +25,12 @@ Inicia el complemento y abre **Open Web UI**. El preflight es de solo lectura: v
 1. Lee la advertencia y marca que aceptas la interrupción temporal de `HA-AP` y que la interfaz está dedicada al AP, sin un perfil Wi-Fi que debas conservar.
 2. Pon exactamente un Meross en modo de configuración y pulsa **Detener temporalmente HA-AP y escanear**. Si el móvil sigue conectado al AP del Meross, desconéctalo: el servidor de configuración del dispositivo puede atender una sola conexión.
 3. Selecciona el AP Meross correspondiente al dispositivo que acabas de poner en modo de configuración.
-4. Introduce el SSID de destino (por ejemplo, `HA-AP`) y la contraseña WPA/WPA2 de esa red. No es la contraseña de Meross. Provisioner ignora las redes ocultas o con formato no válido que el dispositivo incluya en su escaneo.
+4. Introduce el SSID de destino (por ejemplo, `HA-AP`) y la contraseña WPA/WPA2 de esa red. No es la contraseña de Meross. Provisioner ignora las redes ocultas o con formato no válido que el dispositivo incluya en su escaneo. Puedes usar **Mostrar** para comprobar la contraseña antes de enviarla.
 5. Pulsa **Configurar este dispositivo** y espera a que se restaure el AP. Provisioner reintenta las lecturas iniciales durante unos segundos mientras el servidor HTTP del dispositivo termina de arrancar.
 6. Comprueba que el dispositivo recibe una concesión DHCP. La MAC aparece en el resultado; puedes usarla para crear una reserva DHCP en el add-on AP.
 7. Añádelo en Home Assistant con **HomeKit Device** si el modelo lo admite. Los modelos sin HomeKit pueden necesitar una clave local u otra configuración de integración que este complemento aún no gestiona.
+
+Si el SSID de destino coincide con el de la app AP configurada, es normal que el Meross no lo vea durante la configuración: ese AP está detenido. Provisioner lee el SSID, el canal y la visibilidad desde las opciones de la app AP, y usa la MAC de la interfaz para enviar la configuración. Después restaura el AP. La app AP debe tener el SSID visible; los AP ocultos se rechazan con un mensaje explícito.
 
 Si cierras la pantalla durante el escaneo, la sesión caduca y Provisioner intenta restaurar el AP automáticamente. También puedes usar **Cancelar y restaurar HA-AP**.
 
@@ -36,5 +38,6 @@ Si cierras la pantalla durante el escaneo, la sesión caduca y Provisioner inten
 
 - Provisioner no inicia sesión en Meross ni configura `Appliance.Config.Key`. Esto no garantiza que el firmware del dispositivo nunca contacte con la nube después de unirse a la red; compruébalo por modelo/firmware y aplica reglas de salida si necesitas aislamiento.
 - El protocolo SoftAP envía la contraseña por HTTP local sin cifrado real. Configura un dispositivo cada vez, cerca de ti, y usa una contraseña exclusiva para la red IoT.
+- Para configurar un dispositivo mientras `HA-AP` está detenido, Provisioner lee de la app AP su SSID, canal y visibilidad, y la MAC de la interfaz. No guarda, muestra ni envía la contraseña de la app AP.
 - La app requiere el rol `manager` del Supervisor para escanear redes y detener/iniciar el add-on AP.
 - Si el preflight informa de un perfil Wi-Fi existente, el add-on AP no está ejecutándose, no hay Ethernet o las redes se solapan, detente y conserva el mensaje de error para diagnóstico.

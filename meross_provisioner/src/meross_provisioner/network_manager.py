@@ -86,6 +86,19 @@ class NetworkManagerClient:
             f"NetworkManager does not list Wi-Fi interface {interface!r}."
         )
 
+    async def get_device_mac(self, interface: str) -> str:
+        """Read the hardware address even while the AP app owns the device."""
+        output = await self._run(
+            "--get-values", "GENERAL.HWADDR", "device", "show", interface
+        )
+        mac = output.strip().replace("-", ":").casefold()
+        if not _BSSID_RE.fullmatch(mac):
+            raise NetworkManagerError(
+                "NetworkManager did not report a valid MAC address for the "
+                "Wi-Fi device."
+            )
+        return mac
+
     async def find_autoconnecting_wifi_profiles(
         self, interface: str
     ) -> list[WifiProfile]:

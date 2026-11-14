@@ -36,6 +36,34 @@ async def test_scan_maps_nmcli_output_to_access_points() -> None:
 
 
 @pytest.mark.asyncio
+async def test_device_mac_is_read_even_when_ap_app_owns_interface() -> None:
+    client = NetworkManagerClient()
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_run(*args: str, **kwargs: object) -> str:
+        calls.append(args)
+        return "DE:AD:BE:EF:00:01"
+
+    client._run = fake_run
+    mac = await client.get_device_mac("wlan0")
+
+    assert mac == "de:ad:be:ef:00:01"
+    assert calls[0] == ("--get-values", "GENERAL.HWADDR", "device", "show", "wlan0")
+
+
+@pytest.mark.asyncio
+async def test_device_mac_rejects_invalid_output() -> None:
+    client = NetworkManagerClient()
+
+    async def fake_run(*args: str, **kwargs: object) -> str:
+        return "not-a-mac"
+
+    client._run = fake_run
+    with pytest.raises(NetworkManagerError, match="valid MAC"):
+        await client.get_device_mac("wlan0")
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("profiles", "profile_data", "expected"),
     [

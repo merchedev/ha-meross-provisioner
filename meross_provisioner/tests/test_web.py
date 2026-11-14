@@ -75,7 +75,10 @@ async def test_ingress_page_and_preflight_are_available(tmp_path) -> None:
         page = await client.get("/")
         preflight = await client.get("/api/preflight")
         assert page.status == 200
-        assert "Meross Provisioner" in await page.text()
+        page_text = await page.text()
+        assert "Meross Provisioner" in page_text
+        assert 'id="togglePassword"' in page_text
+        assert 'id="targetPassword"' in page_text
         assert (await preflight.json())["preflight"]["ready"] is True
     finally:
         await client.close()

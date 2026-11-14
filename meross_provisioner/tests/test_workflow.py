@@ -4,6 +4,7 @@ import pytest
 
 from meross_provisioner.errors import (
     ConfigurationError,
+    DeviceProtocolError,
     NetworkManagerError,
     SafetyCheckError,
     SessionError,
@@ -22,6 +23,13 @@ from meross_provisioner.workflow import ProvisioningWorkflow, WorkflowConfig
 class FakeSupervisor:
     def __init__(self, *, ethernet_subnet: str = "192.168.1.20/24") -> None:
         self.addon_state = "started"
+        self.ap_options = {
+            "ssid": "HA-AP",
+            "channel": 6,
+            "interface": "wlan0",
+            "hide_ssid": False,
+            "wpa_passphrase": "ap-secret-placeholder",
+        }
         self.wifi_connected = False
         self.wifi_ssid: str | None = None
         self.ethernet_subnet = ethernet_subnet
@@ -73,6 +81,7 @@ class FakeSupervisor:
                 {
                     "interface": "wlan0",
                     "type": "wireless",
+                    "mac": "de:ad:be:ef:00:01",
                     "connected": self.wifi_connected,
                     "wifi": (
                         {"mode": "infrastructure", "ssid": self.wifi_ssid}
@@ -88,6 +97,10 @@ class FakeSupervisor:
         if not self.device_present:
             raise NetworkManagerError("NetworkManager does not list wlan0.")
         return {"interface": interface, "type": "wifi", "state": self.nm_state}
+
+    async def get_device_mac(self, interface: str) -> str:
+        assert interface == "wlan0"
+        return "de:ad:be:ef:00:01"
 
     async def find_autoconnecting_wifi_profiles(
         self, interface: str
@@ -147,7 +160,11 @@ class FakeSupervisor:
 
     async def get_addon_info(self, slug: str) -> dict:
         assert slug == "local_test_ap"
-        return {"slug": slug, "state": self.addon_state}
+        return {
+            "slug": slug,
+            "state": self.addon_state,
+            "options": self.ap_options,
+        }
 
     async def get_addons(self) -> list[dict]:
         return [{"slug": "local_test_ap", "name": "Test AP", "state": self.addon_state}]
@@ -175,12 +192,27 @@ class FakeDevice:
         model: str = "mss210",
         journal: TransactionJournal | None = None,
         fail_write: bool = False,
+        wifi_list: list[DeviceWifiNetwork] | None = None,
     ) -> None:
         self.model = model
         self.journal = journal
         self.password_was_journaled = False
         self.wifi_write: tuple[DeviceWifiNetwork, str] | None = None
         self.fail_write = fail_write
+        self.wifi_list = (
+            wifi_list
+            if wifi_list is not None
+            else [
+                DeviceWifiNetwork(
+                    ssid="HA-AP",
+                    bssid="12:34:56:78:9a:bc",
+                    channel=6,
+                    signal=90,
+                    cipher=3,
+                    encryption=6,
+                )
+            ]
+        )
 
     async def get_device_info(self) -> DeviceInfo:
         return DeviceInfo(
@@ -192,16 +224,7 @@ class FakeDevice:
         )
 
     async def get_wifi_list(self) -> list[DeviceWifiNetwork]:
-        return [
-            DeviceWifiNetwork(
-                ssid="HA-AP",
-                bssid="12:34:56:78:9a:bc",
-                channel=6,
-                signal=90,
-                cipher=3,
-                encryption=6,
-            )
-        ]
+        return list(self.wifi_list)
 
     async def set_wifi(self, network: DeviceWifiNetwork, password: str) -> None:
         if self.journal is not None and self.journal._path.exists():
@@ -295,6 +318,8 @@ async def test_preflight_warns_about_autoconnecting_profiles(tmp_path) -> None:
     report = await workflow.preflight()
 
     assert report.ready
+    assert report.access_point_ssid == "HA-AP"
+    assert "ap-secret-placeholder" not in str(report.to_dict())
     assert any("Supervisor wlan0" in warning for warning in report.warnings)
     assert not any("Supervisor wlan0" in issue for issue in report.issues)
     assert supervisor.stopped == []
@@ -437,10 +462,10 @@ def test_target_bssid_accepts_hyphen_separators() -> None:
         encryption=6,
     )
 
-    assert (
-        ProvisioningWorkflow._find_target_network([network], "HA-AP").bssid
-        == "12-34-56-78-9a-bc"
-    )
+    selected = ProvisioningWorkflow._select_target_network([network], "HA-AP")
+
+    assert selected is not None
+    assert selected.bssid == "12-34-56-78-9a-bc"
 
 
 @pytest.mark.asyncio
@@ -464,6 +489,115 @@ async def test_provision_writes_wifi_and_restores_ap(tmp_path) -> None:
     assert supervisor.profile_cleanup_count == 1
     assert supervisor.addon_state == "started"
     assert all(supervisor.autoconnect_snapshots.values())
+    assert journal.read() is None
+
+
+@pytest.mark.asyncio
+async def test_provision_uses_ap_app_config_when_target_is_stopped(tmp_path) -> None:
+    device = FakeDevice(
+        wifi_list=[
+            DeviceWifiNetwork(
+                ssid="another-network",
+                bssid="11:22:33:44:55:66",
+                channel=1,
+                signal=50,
+                cipher=3,
+                encryption=6,
+            )
+        ]
+    )
+    workflow, supervisor, _, journal = make_workflow(tmp_path, device=device)
+    session_id = await start_scan(workflow)
+
+    result = await workflow.provision(
+        session_id=session_id,
+        device_ssid="Meross_SETUP_1234",
+        device_bssid="aa:bb:cc:dd:ee:ff",
+        target_ssid="HA-AP",
+        target_password="iot-only-test-password",
+    )
+
+    assert device.wifi_write is not None
+    assert device.wifi_write[0].ssid == "HA-AP"
+    assert device.wifi_write[0].bssid == "de:ad:be:ef:00:01"
+    assert device.wifi_write[0].channel == 6
+    assert device.wifi_write[0].cipher == 3
+    assert device.wifi_write[0].encryption == 6
+    assert "ap-secret-placeholder" not in str(result.to_dict())
+    assert supervisor.addon_state == "started"
+    assert journal.read() is None
+
+
+@pytest.mark.asyncio
+async def test_ap_fallback_matches_device_bssid_separator(tmp_path) -> None:
+    device = FakeDevice(
+        wifi_list=[
+            DeviceWifiNetwork(
+                ssid="another-network",
+                bssid="11-22-33-44-55-66",
+                channel=1,
+                signal=50,
+                cipher=3,
+                encryption=6,
+            )
+        ]
+    )
+    workflow, _, _, _ = make_workflow(tmp_path, device=device)
+    session_id = await start_scan(workflow)
+
+    await workflow.provision(
+        session_id=session_id,
+        device_ssid="Meross_SETUP_1234",
+        device_bssid="aa:bb:cc:dd:ee:ff",
+        target_ssid="HA-AP",
+        target_password="iot-only-test-password",
+    )
+
+    assert device.wifi_write is not None
+    assert device.wifi_write[0].bssid == "de-ad-be-ef-00-01"
+
+
+@pytest.mark.asyncio
+async def test_unseen_target_that_is_not_the_ap_is_rejected(tmp_path) -> None:
+    device = FakeDevice(wifi_list=[])
+    workflow, supervisor, _, journal = make_workflow(tmp_path, device=device)
+    session_id = await start_scan(workflow)
+
+    with pytest.raises(DeviceProtocolError, match="cannot see the target SSID"):
+        await workflow.provision(
+            session_id=session_id,
+            device_ssid="Meross_SETUP_1234",
+            device_bssid="aa:bb:cc:dd:ee:ff",
+            target_ssid="another-network",
+            target_password="iot-only-test-password",
+        )
+
+    assert device.wifi_write is None
+    assert supervisor.addon_state == "started"
+    assert journal.read() is None
+
+
+@pytest.mark.asyncio
+async def test_hidden_ap_target_is_rejected(tmp_path) -> None:
+    supervisor = FakeSupervisor()
+    supervisor.ap_options["hide_ssid"] = True
+    device = FakeDevice(wifi_list=[])
+    workflow, _, _, journal = make_workflow(
+        tmp_path, supervisor=supervisor, device=device
+    )
+    session_id = await start_scan(workflow)
+
+    with pytest.raises(DeviceProtocolError, match="hidden"):
+        await workflow.provision(
+            session_id=session_id,
+            device_ssid="Meross_SETUP_1234",
+            device_bssid="aa:bb:cc:dd:ee:ff",
+            target_ssid="HA-AP",
+            target_password="iot-only-test-password",
+        )
+
+    assert device.wifi_write is None
+    assert supervisor.addon_state == "started"
     assert journal.read() is None
 
 
