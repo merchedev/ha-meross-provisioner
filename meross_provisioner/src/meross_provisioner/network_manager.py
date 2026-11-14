@@ -238,8 +238,6 @@ class NetworkManagerClient:
             ssid,
             "802-11-wireless.bssid",
             bssid,
-            "802-11-wireless-security.key-mgmt",
-            "none",
             "connection.uuid",
             str(parsed_uuid),
             "connection.autoconnect",

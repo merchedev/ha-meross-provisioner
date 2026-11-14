@@ -129,7 +129,7 @@ async def test_open_connection_is_uuid_scoped_and_bssid_locked() -> None:
     assert connection_uuid in captured
     assert "aa:bb:cc:dd:ee:ff" in captured
     assert "connection.autoconnect" in captured
-    assert "none" in captured
+    assert not any("802-11-wireless-security" in value for value in captured)
     assert "password" not in captured
 
 

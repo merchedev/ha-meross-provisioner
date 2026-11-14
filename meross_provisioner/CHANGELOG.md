@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.12
+
+- Create the temporary setup profile as a truly open Wi-Fi network.
+- Remove the empty security section that NetworkManager interpreted as WEP.
+
 ## 0.1.11
 
 - Restore compatibility with NetworkManager versions that do not support `managed up`.
