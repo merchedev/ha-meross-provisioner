@@ -1,10 +1,12 @@
 # Meross Provisioner for Home Assistant
 
-**Status: experimental prototype. Hardware provisioning has not yet been verified on a Raspberry Pi 5 / Home Assistant OS.**
+**Status: experimental prototype. First successful Wi-Fi-only provisioning on an MSS210 US, firmware 4.2.9, over Home Assistant OS and a Raspberry Pi 5 (November 2026). Other models and firmware remain unverified.**
 
 Meross Provisioner is a Home Assistant app that aims to place a Meross device on a chosen Wi-Fi network without the Meross mobile app or Meross cloud. It uses a local connection to a device in setup mode, then asks Home Assistant's Supervisor to restore the configured access-point app.
 
 The initial target is a wired Home Assistant OS installation with a dedicated Wi-Fi interface running a compatible access-point app. A provisioning attempt temporarily interrupts that AP. The wired connection keeps the Home Assistant UI available. The target can be that same AP: Provisioner reads its saved SSID/channel metadata before the outage, sends the configuration, and restores it afterwards.
+
+Provisioner only configures Wi-Fi. After the device joins the network, use Home Assistant's **HomeKit Device** integration when supported, or the [Meross LAN](https://github.com/krahabb/meross_lan) HACS integration for local HTTP control. The official **Meross** integration uses the cloud and is not required for local control. See [After provisioning](docs/post-provisioning.md) for the full sequence, LED behavior, and the optional local MQTT binding path.
 
 > This is an independent community project and is not affiliated with Meross. It does not control devices. After provisioning, use Home Assistant's HomeKit Device integration or a suitable local Meross integration. Non-HomeKit devices may need an additional local device key/integration setup; that is not implemented here.
 
@@ -49,8 +51,18 @@ This repository is structured as a Home Assistant add-on repository. On a Home A
 
 Do not point a production Home Assistant installation at this experimental prototype. First follow the preflight and recovery instructions in the hardware guide.
 
+## Future work
+
+- Hardware-test MSS425FC and MSL430, plus more MSS210 firmware revisions.
+- Add optional post-provisioning reachability/DHCP verification in the UI.
+- Evaluate a supported local MQTT binding path for users who want normal LED behavior and full cloud isolation.
+- Investigate BLE commissioning for models that do not expose a usable setup AP.
+- Validate other access-point apps, drivers, and HAOS versions.
+
 ## Documentation
 
+- [After provisioning](docs/post-provisioning.md)
+- [Troubleshooting and FAQ](docs/troubleshooting.md)
 - [Architecture](docs/architecture.md)
 - [Meross setup protocol](docs/meross-protocol.md)
 - [Hardware and platform support](docs/platform-support.md)

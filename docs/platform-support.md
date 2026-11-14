@@ -6,7 +6,7 @@ Compatibility is a property of the complete combination: device model/revision/f
 
 | Platform / hardware | Status | Requirements and limitations |
 | --- | --- | --- |
-| Raspberry Pi 5, Home Assistant OS, Ethernet + internal Wi-Fi | **Target; not hardware-verified** | Ethernet must remain connected. The app uses host D-Bus/NetworkManager to temporarily claim `wlan0` after the AP app stops. The exact AP app must restore its SSID/DHCP settings when restarted. |
+| Raspberry Pi 5, Home Assistant OS, Ethernet + internal Wi-Fi | **First successful Wi-Fi-only provisioning; still experimental** | MSS210 US firmware 4.2.9, November 2026. Ethernet stayed connected. The app used host D-Bus/NetworkManager to temporarily claim `wlan0` after the AP app stopped. The AP app restored its SSID/DHCP settings. |
 | Other Home Assistant OS hardware | **Not tested** | Needs a NetworkManager-visible wireless device, host D-Bus access, a working station mode, and a supported AP app lifecycle. |
 | Home Assistant Supervised | **Planned / not tested** | Requires Supervisor API access, host D-Bus, and NetworkManager behavior equivalent to the HAOS backend. |
 | Home Assistant Container / Core | **Not supported by the first adapter** | No Supervisor app API or host D-Bus integration. A separate, narrowly scoped Linux backend is required. |
@@ -27,6 +27,18 @@ The platform adapter should check these conditions before changing anything:
 
 If any condition cannot be established, the app should refuse to provision and explain what to check. It must not try privileged shell commands as a fallback.
 
+## Verified test records
+
+### MSS210 US, firmware 4.2.9 (2026-11-14)
+
+- Platform: Raspberry Pi 5, Home Assistant OS, Ethernet management, internal Wi-Fi running a compatible access-point app on `wlan0`.
+- AP: 2.4 GHz channel 1, WPA2, SSID restored automatically after provisioning.
+- Device: MSS210 US, firmware 4.2.9, Wi-Fi-only setup. No Meross account, `Appliance.Config.Key`, or MQTT binding was configured.
+- Result: Provisioner stopped the AP, scanned and selected the setup AP, joined it, read the device identity/Wi-Fi list, sent `Appliance.Config.Wifi`, and restored the AP. After the reboot the device associated to the target AP and completed the WPA 4-way handshake.
+- Local control: the device was added to Home Assistant with the Meross LAN HACS integration over HTTP using its DHCP reservation. No Meross cloud account was used.
+- LED: the device kept blinking green even though local HTTP control worked; this is consistent with the “connected but unbound” state. The Meross LAN DND/LED entity could disable the LED, at the cost of losing the visual status.
+- Not verified: local MQTT binding, MSS425FC, MSL430, other firmware revisions, and long-term stability.
+
 ## Device support
 
 The project begins with a protocol discovery step, not a blanket device claim. Each tested entry should record:
@@ -38,4 +50,4 @@ The project begins with a protocol discovery step, not a blanket device claim. E
 - Whether Home Assistant's native HomeKit Device integration discovers it afterwards, if applicable.
 - Test date and HAOS/Supervisor/AP app versions.
 
-MSS210, MSS425FC, and MSL430 are initial test targets only. The current code must not label a model as tested until a physical test report has been added.
+MSS210 US firmware 4.2.9 now has a verified Wi-Fi-only provisioning record. MSS425FC and MSL430 remain initial test targets only. The current code must not label a model as tested until a physical test report has been added.

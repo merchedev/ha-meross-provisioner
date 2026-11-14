@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.17
+
+- Document the first successful MSS210 US firmware 4.2.9 provisioning run.
+- Add post-provisioning, Meross LAN, LED/unbound, and local MQTT binding guidance.
+- Add a troubleshooting and FAQ guide covering the observed errors.
+- Record verified hardware status; MSS425FC and MSL430 remain untested.
+
 ## 0.1.16
 
 - Fall back to terse `nmcli` output and Supervisor network data when reading the AP interface MAC.

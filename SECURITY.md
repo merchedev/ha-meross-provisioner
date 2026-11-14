@@ -22,6 +22,10 @@ Please do not publish credentials, packet captures, or a working exploit in an i
 - Suspended profile UUIDs are journaled for recovery; profile contents and credentials are never copied. Existing profiles are never deleted.
 - The web server accepts traffic only from the Supervisor Ingress proxy at `172.30.32.2`; do not expose or map the app's internal port.
 
+## Verified test
+
+The first hardware test (MSS210 US, firmware 4.2.9) used Wi-Fi-only provisioning and local HTTP control through the Meross LAN HACS integration. No Meross account, `Appliance.Config.Key`, or MQTT binding was configured. The device remained in the unbound LED state. This does not prove that the firmware never contacts vendor servers; apply egress rules if cloud isolation is required.
+
 ## Known risks
 
 - Meross setup mode uses local HTTP and Base64-encoded credentials. A nearby observer able to join/monitor the setup AP could recover the target Wi-Fi password.

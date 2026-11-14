@@ -26,6 +26,10 @@ When the target is the access point managed by Provisioner, that AP is stopped w
 
 The app makes no Meross cloud requests, but omitting `Appliance.Config.Key` is not proof that every device firmware stays offline after joining Wi-Fi. Record observed network behavior per model/firmware. Do not claim strict cloud isolation until it has been verified or enforced by the user's network policy.
 
+## Verified observation
+
+On an MSS210 US running firmware 4.2.9, the Wi-Fi-only flow succeeded without a Meross account: the device accepted `Appliance.Config.Wifi`, rebooted, associated to the target AP, and completed the WPA 4-way handshake. The device remained in the unbound LED state because `Appliance.Config.Key` and the bind exchange were intentionally not sent. Local HTTP control worked through the Meross LAN custom integration. Other models and firmware revisions remain unverified.
+
 ## Credential encoding and transport security
 
 The documented Wi-Fi payload encodes the SSID and password as Base64. Base64 is reversible encoding, not encryption. The local setup AP/HTTP exchange must therefore be treated as plaintext. The UI must clearly disclose this and the implementation must never log or persist the password.

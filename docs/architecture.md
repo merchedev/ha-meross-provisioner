@@ -41,6 +41,8 @@ The web service accepts requests only from the Supervisor's internal Ingress pro
 
 The transaction must always have a timeout, a cancel operation, and a startup recovery path. The journal must never contain passwords, device keys, or raw request bodies.
 
+The first hardware run (MSS210 US, firmware 4.2.9) followed this lifecycle end to end. The target was the same AP that Provisioner stopped, so the device could not see it during provisioning; the workflow used the AP app's saved SSID/channel/MAC metadata and restored the AP immediately after the device acknowledged the write. Local control was then added with the Meross LAN HACS integration over HTTP. Device control, cloud binding, and local MQTT binding remain outside this project.
+
 ## Network profile safety
 
 The AP app marks its device unmanaged while hostapd controls it. Provisioner temporarily asks NetworkManager to manage the device and suspends autoconnect on saved profiles that could claim the radio. It creates a new profile with a generated UUID, deletes only that profile during cleanup, and restores autoconnect on the suspended profiles. Existing profiles are never deleted and their other settings are not changed.
