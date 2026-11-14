@@ -350,6 +350,7 @@ class ProvisioningWorkflow:
                 await self._network_manager.set_managed(
                     self._config.wifi_interface, True
                 )
+                await self._wait_for_wifi_ready(self._config.wifi_interface)
                 journal["phase"] = "wifi_managed"
                 self._journal.write(journal)
                 access_points = await self._network_manager.scan_access_points(
@@ -361,9 +362,20 @@ class ProvisioningWorkflow:
                     if ap.looks_like_meross_setup_ap and ap.mode == "infrastructure"
                 ]
                 if not candidates:
+                    seen = sorted({ap.ssid for ap in access_points})
+                    if not seen:
+                        raise SessionError(
+                            "NetworkManager returned no Wi-Fi networks. Check that "
+                            "the setup device is broadcasting its AP and that wlan0 "
+                            "can scan."
+                        )
+                    preview = ", ".join(seen[:12])
+                    if len(seen) > 12:
+                        preview += f", and {len(seen) - 12} more"
                     raise SessionError(
-                        "No Meross-looking setup AP was found. Put one device "
-                        "in setup mode and scan again."
+                        "No Meross-looking setup AP was found. Networks seen: "
+                        f"{preview}. Check the device model's reset procedure and "
+                        "that it is in AP setup mode, not only Bluetooth pairing."
                     )
                 ssids = [ap.ssid for ap in candidates]
                 if len(ssids) != len(set(ssids)):
@@ -625,6 +637,25 @@ class ProvisioningWorkflow:
             raise
         except RecoveryError:
             _LOGGER.exception("Session timed out and AP recovery failed")
+
+    async def _wait_for_wifi_ready(
+        self, interface: str, timeout_seconds: float = 15
+    ) -> None:
+        """Wait until NetworkManager has brought the interface up for scanning."""
+        deadline = asyncio.get_running_loop().time() + timeout_seconds
+        while asyncio.get_running_loop().time() < deadline:
+            info = await self._network_manager.get_device_info(interface)
+            state = info.get("state", "").casefold()
+            if state in {"disconnected", "connected"}:
+                return
+            if state == "unavailable":
+                raise NetworkManagerError(
+                    "NetworkManager reports the Wi-Fi device as unavailable."
+                )
+            await asyncio.sleep(0.5)
+        raise NetworkManagerError(
+            "NetworkManager did not make the Wi-Fi device available for scanning."
+        )
 
     def _private_gateway(self, gateway: str) -> str:
         if not isinstance(gateway, str) or not gateway:

@@ -6,6 +6,7 @@ from meross_provisioner.errors import (
     ConfigurationError,
     NetworkManagerError,
     SafetyCheckError,
+    SessionError,
     UnsupportedDeviceError,
 )
 from meross_provisioner.journal import TransactionJournal
@@ -44,6 +45,20 @@ class FakeSupervisor:
             profile.connection_uuid: True for profile in self.wifi_profiles
         }
         self.temp_connection_uuid: str | None = None
+        self.scan_results = [
+            AccessPoint(
+                ssid="Meross_SETUP_1234",
+                mac="aa:bb:cc:dd:ee:ff",
+                frequency=2412,
+                signal=77,
+            ),
+            AccessPoint(
+                ssid="ordinary-network",
+                mac="11:22:33:44:55:66",
+                frequency=2437,
+                signal=80,
+            ),
+        ]
 
     async def get_network_info(self) -> dict:
         return {
@@ -101,20 +116,7 @@ class FakeSupervisor:
         assert interface == "wlan0"
         assert self.addon_state == "stopped"
         assert self.nm_state == "disconnected"
-        return [
-            AccessPoint(
-                ssid="Meross_SETUP_1234",
-                mac="aa:bb:cc:dd:ee:ff",
-                frequency=2412,
-                signal=77,
-            ),
-            AccessPoint(
-                ssid="ordinary-network",
-                mac="11:22:33:44:55:66",
-                frequency=2437,
-                signal=80,
-            ),
-        ]
+        return self.scan_results
 
     async def create_open_connection(
         self, interface: str, ssid: str, bssid: str, connection_uuid: str
@@ -315,6 +317,47 @@ async def test_scan_pauses_ap_and_returns_only_meross_candidates(tmp_path) -> No
     await workflow.cancel(session_id)
     assert supervisor.addon_state == "started"
     assert supervisor.started == ["local_test_ap"]
+    assert all(supervisor.autoconnect_snapshots.values())
+    assert journal.read() is None
+
+
+@pytest.mark.asyncio
+async def test_scan_reports_nearby_networks_and_restores_state(tmp_path) -> None:
+    supervisor = FakeSupervisor()
+    supervisor.scan_results = [
+        AccessPoint(
+            ssid="home-network",
+            mac="11:22:33:44:55:66",
+            frequency=2437,
+            signal=80,
+        )
+    ]
+    workflow, _, _, journal = make_workflow(tmp_path, supervisor=supervisor)
+
+    with pytest.raises(SessionError, match="home-network"):
+        await workflow.scan(
+            confirm_ap_interruption=True,
+            confirm_dedicated_interface=True,
+        )
+
+    assert supervisor.addon_state == "started"
+    assert all(supervisor.autoconnect_snapshots.values())
+    assert journal.read() is None
+
+
+@pytest.mark.asyncio
+async def test_scan_reports_no_networks_when_scan_is_empty(tmp_path) -> None:
+    supervisor = FakeSupervisor()
+    supervisor.scan_results = []
+    workflow, _, _, journal = make_workflow(tmp_path, supervisor=supervisor)
+
+    with pytest.raises(SessionError, match="returned no Wi-Fi networks"):
+        await workflow.scan(
+            confirm_ap_interruption=True,
+            confirm_dedicated_interface=True,
+        )
+
+    assert supervisor.addon_state == "started"
     assert all(supervisor.autoconnect_snapshots.values())
     assert journal.read() is None
 

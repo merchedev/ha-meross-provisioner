@@ -20,7 +20,7 @@ def test_nmcli_parser_unescapes_colons_in_ssid_and_bssid() -> None:
 
 @pytest.mark.asyncio
 async def test_scan_maps_nmcli_output_to_access_points() -> None:
-    client = NetworkManagerClient()
+    client = NetworkManagerClient(scan_delay=0)
 
     async def fake_run(*args: str, **kwargs: object) -> str:
         return r"Meross_SETUP:aa\:bb\:cc\:dd\:ee\:ff:2412 MHz:77:Infra"

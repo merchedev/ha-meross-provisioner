@@ -1,10 +1,17 @@
 # Changelog
 
+## 0.1.9
+
+- Wait for NetworkManager to bring the Wi-Fi device up after stopping the AP.
+- Rescan with retries and report nearby networks when no Meross setup AP is found.
+
 ## 0.1.8
 
 - Automatically suspend autoconnect for saved Wi-Fi profiles that could claim the AP interface.
 - Restore their autoconnect state after provisioning, cancellation, timeout, or crash recovery.
 - Remove the need to edit NetworkManager profiles manually.
+- Wait for NetworkManager to bring the Wi-Fi device up and retry scans after stopping the AP.
+- Report nearby network names when no Meross setup AP is found.
 
 ## 0.1.7
 

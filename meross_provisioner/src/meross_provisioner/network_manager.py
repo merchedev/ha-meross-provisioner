@@ -19,8 +19,9 @@ _WIFI_PROFILE_TYPES = {"802-11-wireless", "wifi"}
 class NetworkManagerClient:
     """Run a small, allowlisted set of nmcli operations over host D-Bus."""
 
-    def __init__(self, *, command_timeout: float = 25) -> None:
+    def __init__(self, *, command_timeout: float = 25, scan_delay: float = 4.0) -> None:
         self._command_timeout = command_timeout
+        self._scan_delay = scan_delay
 
     async def _run(self, *args: str, timeout: float | None = None) -> str:
         environment = os.environ.copy()
@@ -102,7 +103,7 @@ class NetworkManagerClient:
             if profile_type.casefold() not in _WIFI_PROFILE_TYPES:
                 continue
             try:
-                uuid.UUID(connection_uuid)
+                parsed_uuid = uuid.UUID(connection_uuid)
             except ValueError:
                 raise NetworkManagerError(
                     "NetworkManager returned an invalid Wi-Fi profile ID."
@@ -133,7 +134,7 @@ class NetworkManagerClient:
                 blocking.append(
                     WifiProfile(
                         name=name or "unnamed profile",
-                        connection_uuid=str(uuid.UUID(connection_uuid)),
+                        connection_uuid=str(parsed_uuid),
                     )
                 )
         return blocking
@@ -171,52 +172,36 @@ class NetworkManagerClient:
 
     async def scan_access_points(self, interface: str) -> list[AccessPoint]:
         """Scan nearby SSIDs with NetworkManager after the AP app is stopped."""
-        output = await self._run(
-            "--terse",
-            "--escape",
-            "yes",
-            "--fields",
-            "SSID,BSSID,FREQ,SIGNAL,MODE",
-            "device",
-            "wifi",
-            "list",
-            "ifname",
-            interface,
-            "--rescan",
-            "yes",
-            timeout=35,
-        )
-        access_points: list[AccessPoint] = []
-        for line in output.splitlines():
-            fields = _split_nmcli_fields(line)
-            if len(fields) < 5:
-                continue
-            ssid, bssid, frequency, signal, mode = fields[:5]
-            frequency_match = _FREQUENCY_RE.match(frequency)
-            if not ssid or not _BSSID_RE.fullmatch(bssid) or not frequency_match:
-                continue
-            try:
-                signal_value = int(signal)
-                frequency_value = int(frequency_match.group(1))
-            except ValueError:
-                continue
-            mode_value = {
-                "infra": "infrastructure",
-                "infrastructure": "infrastructure",
-                "ad-hoc": "adhoc",
-                "adhoc": "adhoc",
-                "ap": "ap",
-            }.get(mode.casefold(), mode.casefold())
-            access_points.append(
-                AccessPoint(
-                    ssid=ssid,
-                    mac=bssid,
-                    frequency=frequency_value,
-                    signal=signal_value,
-                    mode=mode_value,
+        for attempt in range(2):
+            with contextlib.suppress(NetworkManagerError):
+                await self._run(
+                    "device",
+                    "wifi",
+                    "rescan",
+                    "ifname",
+                    interface,
+                    timeout=30,
                 )
+            await asyncio.sleep(
+                self._scan_delay if attempt == 0 else self._scan_delay / 2
             )
-        return access_points
+            output = await self._run(
+                "--terse",
+                "--escape",
+                "yes",
+                "--fields",
+                "SSID,BSSID,FREQ,SIGNAL,MODE",
+                "device",
+                "wifi",
+                "list",
+                "ifname",
+                interface,
+                timeout=20,
+            )
+            access_points = _parse_access_points(output)
+            if access_points:
+                return access_points
+        return []
 
     async def create_open_connection(
         self, interface: str, ssid: str, bssid: str, connection_uuid: str
@@ -328,6 +313,40 @@ def _split_nmcli_fields(line: str) -> list[str]:
         current.append("\\")
     fields.append("".join(current))
     return fields
+
+
+def _parse_access_points(output: str) -> list[AccessPoint]:
+    access_points: list[AccessPoint] = []
+    for line in output.splitlines():
+        fields = _split_nmcli_fields(line)
+        if len(fields) < 5:
+            continue
+        ssid, bssid, frequency, signal, mode = fields[:5]
+        frequency_match = _FREQUENCY_RE.match(frequency)
+        if not ssid or not _BSSID_RE.fullmatch(bssid) or not frequency_match:
+            continue
+        try:
+            signal_value = int(signal)
+            frequency_value = int(frequency_match.group(1))
+        except ValueError:
+            continue
+        mode_value = {
+            "infra": "infrastructure",
+            "infrastructure": "infrastructure",
+            "ad-hoc": "adhoc",
+            "adhoc": "adhoc",
+            "ap": "ap",
+        }.get(mode.casefold(), mode.casefold())
+        access_points.append(
+            AccessPoint(
+                ssid=ssid,
+                mac=bssid,
+                frequency=frequency_value,
+                signal=signal_value,
+                mode=mode_value,
+            )
+        )
+    return access_points
 
 
 async def _stop_process(process: asyncio.subprocess.Process) -> None:
