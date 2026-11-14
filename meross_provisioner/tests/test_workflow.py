@@ -427,6 +427,22 @@ async def test_recovery_restarts_ap_if_it_started_before_profile_cleanup(
     assert journal.read() is None
 
 
+def test_target_bssid_accepts_hyphen_separators() -> None:
+    network = DeviceWifiNetwork(
+        ssid="HA-AP",
+        bssid="12-34-56-78-9a-bc",
+        channel=6,
+        signal=90,
+        cipher=3,
+        encryption=6,
+    )
+
+    assert (
+        ProvisioningWorkflow._find_target_network([network], "HA-AP").bssid
+        == "12-34-56-78-9a-bc"
+    )
+
+
 @pytest.mark.asyncio
 async def test_provision_writes_wifi_and_restores_ap(tmp_path) -> None:
     workflow, supervisor, device, journal = make_workflow(tmp_path)

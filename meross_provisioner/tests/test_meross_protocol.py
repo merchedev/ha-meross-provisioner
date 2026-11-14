@@ -70,6 +70,54 @@ def test_decode_ssid_rejects_invalid_base64_and_binary_text() -> None:
         decode_ssid(base64.b64encode(b"\xff").decode("ascii"))
 
 
+def test_decode_ssid_accepts_plain_text_and_strips_nul_padding() -> None:
+    assert decode_ssid("HA-AP", allow_plain_text=True) == "HA-AP"
+    padded = base64.b64encode(b"HA-AP\x00\x00").decode("ascii")
+    assert decode_ssid(padded) == "HA-AP"
+
+
+def test_wifi_list_skips_hidden_networks_without_aborting() -> None:
+    payload = {
+        "wifiList": [
+            {
+                "ssid": "",
+                "bssid": "11:22:33:44:55:66",
+                "channel": 1,
+                "signal": 40,
+                "cipher": 0,
+                "encryption": 0,
+            },
+            {
+                "ssid": encode_wifi_text("HA-AP"),
+                "bssid": "aa:bb:cc:dd:ee:ff",
+                "channel": 6,
+                "signal": 72,
+                "cipher": 3,
+                "encryption": 6,
+            },
+        ]
+    }
+
+    assert [network.ssid for network in parse_wifi_list(payload)] == ["HA-AP"]
+
+
+def test_wifi_list_accepts_plain_text_ssids_from_some_firmware() -> None:
+    payload = {
+        "wifiList": [
+            {
+                "ssid": "HA-AP",
+                "bssid": "aa:bb:cc:dd:ee:ff",
+                "channel": 6,
+                "signal": 72,
+                "cipher": 3,
+                "encryption": 6,
+            }
+        ]
+    }
+
+    assert [network.ssid for network in parse_wifi_list(payload)] == ["HA-AP"]
+
+
 def test_parse_device_identity() -> None:
     payload = {
         "all": {

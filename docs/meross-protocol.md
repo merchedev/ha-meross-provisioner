@@ -18,6 +18,8 @@ The main operations used by this project are:
 
 The embedded setup HTTP server can become reachable a few seconds after DHCP completes. The client therefore retries only the read (`GET`) requests with a bounded delay and closes each HTTP connection after the response. A failed `SET` is not retried automatically, because the device may have accepted it before the connection failed.
 
+The scan response is firmware-dependent: hidden networks can appear with an empty SSID, some builds report SSIDs as plain text or NUL-padded fields, and older firmware uses hyphen-separated BSSIDs. The parser skips entries that cannot be provisioned, accepts both SSID encodings, and sends the BSSID back in the separator format the device reported.
+
 `Appliance.Config.Key` is intentionally not part of the initial flow. It is associated with the Meross MQTT endpoint/account or a private MQTT setup and is not needed for the Wi-Fi-only provisioning attempt. Device-control keys and MQTT binding are a separate project decision.
 
 The app makes no Meross cloud requests, but omitting `Appliance.Config.Key` is not proof that every device firmware stays offline after joining Wi-Fi. Record observed network behavior per model/firmware. Do not claim strict cloud isolation until it has been verified or enforced by the user's network policy.

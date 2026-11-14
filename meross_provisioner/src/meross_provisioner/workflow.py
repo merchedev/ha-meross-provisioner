@@ -35,7 +35,8 @@ from .models import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-_BSSID_RE = re.compile(r"^(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$")
+# Older Meross firmware reports BSSIDs with hyphens; newer firmware uses colons.
+_BSSID_RE = re.compile(r"^(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$")
 
 
 class SupervisorPort(Protocol):

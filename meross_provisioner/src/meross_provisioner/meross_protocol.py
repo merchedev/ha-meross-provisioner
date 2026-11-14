@@ -65,17 +65,39 @@ def parse_response(response: Any, *, expected_namespace: str) -> dict[str, Any]:
     return payload
 
 
-def decode_ssid(value: Any) -> str:
-    """Decode a Base64 SSID while rejecting malformed or non-UTF-8 values."""
+def decode_ssid(value: Any, *, allow_plain_text: bool = False) -> str:
+    """Decode a Base64 SSID while rejecting malformed or non-UTF-8 values.
+
+    Some firmware reports scan results as plain text. Callers parsing the
+    Wi-Fi list can opt into that fallback; protocol helpers keep strict
+    Base64 semantics.
+    """
     if not isinstance(value, str):
         raise DeviceProtocolError("The device returned an invalid SSID value.")
     try:
-        decoded = base64.b64decode(value, validate=True).decode("utf-8")
-    except (binascii.Error, UnicodeDecodeError, ValueError) as err:
-        raise DeviceProtocolError("The device returned an unreadable SSID.") from err
-    if not decoded or "\x00" in decoded:
+        raw = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as err:
+        if allow_plain_text and value:
+            text = value
+        else:
+            raise DeviceProtocolError(
+                "The device returned an unreadable SSID."
+            ) from err
+    else:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as err:
+            if allow_plain_text and value:
+                text = value
+            else:
+                raise DeviceProtocolError(
+                    "The device returned an unreadable SSID."
+                ) from err
+    # SSIDs are fixed-size fields on some firmware and can arrive NUL-padded.
+    text = text.rstrip("\x00")
+    if not text or "\x00" in text:
         raise DeviceProtocolError("The device returned an empty or invalid SSID.")
-    return decoded
+    return text
 
 
 def encode_wifi_text(value: str) -> str:
@@ -120,7 +142,11 @@ def parse_wifi_list(payload: Mapping[str, Any]) -> list[DeviceWifiNetwork]:
         if not isinstance(entry, dict):
             continue
         try:
-            ssid = decode_ssid(entry.get("ssid"))
+            ssid = decode_ssid(entry.get("ssid"), allow_plain_text=True)
+        except DeviceProtocolError:
+            # Hidden networks and malformed entries cannot be provisioned.
+            continue
+        try:
             bssid = str(entry["bssid"])
             channel = int(entry["channel"])
             signal = int(entry.get("signal", 0))

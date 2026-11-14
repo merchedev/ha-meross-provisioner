@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.14
+
+- Skip hidden or malformed Wi-Fi scan entries instead of aborting the whole list.
+- Accept plain-text and NUL-padded SSIDs reported by some firmware.
+- Accept hyphen-separated target BSSIDs from older firmware.
+
 ## 0.1.13
 
 - Retry the initial setup request while the Meross HTTP endpoint starts.
