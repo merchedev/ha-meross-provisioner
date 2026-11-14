@@ -35,15 +35,68 @@ async def test_scan_maps_nmcli_output_to_access_points() -> None:
 
 
 @pytest.mark.asyncio
-async def test_saved_wifi_profile_detection_does_not_return_profile_names() -> None:
+@pytest.mark.parametrize(
+    ("profiles", "profile_data", "expected"),
+    [
+        (
+            "home-wifi:11111111-1111-4111-8111-111111111111:802-11-wireless",
+            {
+                "11111111-1111-4111-8111-111111111111": {
+                    "connection.interface-name": "wlan0",
+                    "connection.autoconnect": "yes",
+                }
+            },
+            ["home-wifi"],
+        ),
+        (
+            "other-wifi:22222222-2222-4222-8222-222222222222:802-11-wireless",
+            {
+                "22222222-2222-4222-8222-222222222222": {
+                    "connection.interface-name": "wlan1",
+                    "connection.autoconnect": "yes",
+                }
+            },
+            [],
+        ),
+        (
+            "manual-wifi:33333333-3333-4333-8333-333333333333:802-11-wireless",
+            {
+                "33333333-3333-4333-8333-333333333333": {
+                    "connection.interface-name": "wlan0",
+                    "connection.autoconnect": "no",
+                }
+            },
+            [],
+        ),
+        (
+            "unbound-wifi:44444444-4444-4444-8444-444444444444:802-11-wireless",
+            {
+                "44444444-4444-4444-8444-444444444444": {
+                    "connection.interface-name": "",
+                    "connection.autoconnect": "yes",
+                }
+            },
+            ["unbound-wifi"],
+        ),
+    ],
+)
+async def test_only_autoconnecting_profiles_for_the_target_interface_block(
+    profiles: str,
+    profile_data: dict[str, dict[str, str]],
+    expected: list[str],
+) -> None:
     client = NetworkManagerClient()
 
     async def fake_run(*args: str, **kwargs: object) -> str:
-        return "802-3-ethernet\n802-11-wireless"
+        if args[:2] == ("--terse", "--escape"):
+            return profiles
+        setting = args[1]
+        profile_uuid = args[-1]
+        return profile_data[profile_uuid][setting]
 
     client._run = fake_run
 
-    assert await client.has_saved_wifi_profiles()
+    assert (await client.find_autoconnecting_wifi_profiles("wlan0")) == expected
 
 
 @pytest.mark.asyncio

@@ -1,41 +1,47 @@
 # Changelog
 
-## 0.1.6 — support AP-managed Wi-Fi interfaces
+## 0.1.7
+
+- Only block saved Wi-Fi profiles that could autoconnect to the selected AP interface.
+- Show the names of blocking profiles in preflight without exposing credentials.
+- Format release headings so Home Assistant shows only updates newer than the installed version.
+
+## 0.1.6
 
 - Use NetworkManager over host D-Bus when the AP app marks its Wi-Fi device unmanaged.
 - Scan and connect with a UUID-scoped temporary profile; preserve other profiles.
 - Improve preflight diagnostics for interfaces NetworkManager cannot see.
 
-## 0.1.5 — support AP-managed Wi-Fi interfaces
+## 0.1.5
 
 - Use NetworkManager over host D-Bus for interfaces marked unmanaged by the AP app.
 - Create and remove only a uniquely identified temporary Wi-Fi connection.
 - Add NetworkManager preflight and parser tests.
 
-## 0.1.4 — improve network preflight diagnostics
+## 0.1.4
 
 - Include the failing Supervisor endpoint in safe preflight errors.
 - Report the wireless interfaces visible to the Supervisor before scanning.
 
-## 0.1.3 — fix Supervisor environment at startup
+## 0.1.3
 
 - Start through S6 `with-contenv` so the Supervisor token reaches the app.
 - Set the Python source path explicitly and verify the web module imports during image build.
 - Add translated configuration help and a Home Assistant documentation tab.
 
-## 0.1.2 — fix package discovery at runtime
+## 0.1.2
 
 - Export the application source path in the startup script.
 - Fail the image build if the Python package cannot be imported.
 - Bump the app version so Home Assistant rebuilds the image.
 
-## 0.1.1 — use a Python-enabled Home Assistant base image
+## 0.1.1
 
 - Pin the app image to Home Assistant's Python base image.
 - Remove the deprecated per-architecture `build.yaml` and build with `python -m pip`.
 - Add an amd64 Docker image build to CI and bump the app version.
 
-## 0.1.0 — initial experimental prototype
+## 0.1.0
 
 - Add a Home Assistant Ingress app skeleton with Supervisor preflight and recovery.
 - Add local Meross SoftAP protocol helpers for device identity, Wi-Fi scan, and Wi-Fi-only setup.

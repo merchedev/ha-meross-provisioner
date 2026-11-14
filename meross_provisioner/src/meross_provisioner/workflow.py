@@ -58,7 +58,7 @@ class NetworkManagerPort(Protocol):
 
     async def get_device_info(self, interface: str) -> dict[str, str]: ...
 
-    async def has_saved_wifi_profiles(self) -> bool: ...
+    async def find_autoconnecting_wifi_profiles(self, interface: str) -> list[str]: ...
 
     async def set_managed(self, interface: str, managed: bool) -> None: ...
 
@@ -191,8 +191,10 @@ class ProvisioningWorkflow:
             wifi_device = await self._network_manager.get_device_info(
                 self._config.wifi_interface
             )
-            has_saved_wifi_profiles = (
-                await self._network_manager.has_saved_wifi_profiles()
+            blocking_wifi_profiles = (
+                await self._network_manager.find_autoconnecting_wifi_profiles(
+                    self._config.wifi_interface
+                )
             )
             addon = await self._supervisor.get_addon_info(
                 self._config.access_point_addon_slug
@@ -235,10 +237,14 @@ class ProvisioningWorkflow:
                 "NetworkManager reports the AP interface in state "
                 f"{wifi_device_state!r}; expected unmanaged or disconnected."
             )
-        if has_saved_wifi_profiles:
+        if blocking_wifi_profiles:
+            names = ", ".join(blocking_wifi_profiles[:5])
+            if len(blocking_wifi_profiles) > 5:
+                names += f", and {len(blocking_wifi_profiles) - 5} more"
             issues.append(
-                "NetworkManager has saved Wi-Fi profiles. Remove or safely disable "
-                "them before using this dedicated AP interface."
+                "NetworkManager has saved Wi-Fi profiles that may autoconnect to "
+                f"{self._config.wifi_interface!r}: {names}. Disable their autoconnect "
+                "or remove them before using this dedicated AP interface."
             )
 
         state = addon.get("state")

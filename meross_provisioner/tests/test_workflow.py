@@ -25,7 +25,7 @@ class FakeSupervisor:
         self.profile_cleanup_count = 0
         self.nm_state = "unmanaged"
         self.device_present = True
-        self.saved_wifi_profiles = False
+        self.blocking_wifi_profiles: list[str] = []
         self.temp_connection_uuid: str | None = None
 
     async def get_network_info(self) -> dict:
@@ -56,8 +56,9 @@ class FakeSupervisor:
             raise NetworkManagerError("NetworkManager does not list wlan0.")
         return {"interface": interface, "type": "wifi", "state": self.nm_state}
 
-    async def has_saved_wifi_profiles(self) -> bool:
-        return self.saved_wifi_profiles
+    async def find_autoconnecting_wifi_profiles(self, interface: str) -> list[str]:
+        assert interface == "wlan0"
+        return self.blocking_wifi_profiles
 
     async def set_managed(self, interface: str, managed: bool) -> None:
         assert interface == "wlan0"
@@ -253,13 +254,13 @@ async def test_scan_requires_both_explicit_confirmations(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_preflight_refuses_existing_wifi_profile(tmp_path) -> None:
     supervisor = FakeSupervisor()
-    supervisor.saved_wifi_profiles = True
+    supervisor.blocking_wifi_profiles = ["legacy-home-wifi"]
     workflow, _, _, _ = make_workflow(tmp_path, supervisor=supervisor)
 
     report = await workflow.preflight()
 
     assert not report.ready
-    assert any("saved Wi-Fi profiles" in issue for issue in report.issues)
+    assert any("legacy-home-wifi" in issue for issue in report.issues)
     assert supervisor.stopped == []
 
 

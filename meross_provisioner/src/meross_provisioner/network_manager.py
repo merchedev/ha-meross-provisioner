@@ -80,21 +80,56 @@ class NetworkManagerClient:
             f"NetworkManager does not list Wi-Fi interface {interface!r}."
         )
 
-    async def has_saved_wifi_profiles(self) -> bool:
-        """Conservatively detect saved Wi-Fi profiles before taking over the radio."""
+    async def find_autoconnecting_wifi_profiles(self, interface: str) -> list[str]:
+        """Return Wi-Fi profile names that could autoconnect to this interface."""
         output = await self._run(
             "--terse",
             "--escape",
             "yes",
             "--fields",
-            "TYPE",
+            "NAME,UUID,TYPE",
             "connection",
             "show",
         )
-        return any(
-            line.strip().casefold() in _WIFI_PROFILE_TYPES
-            for line in output.splitlines()
-        )
+        blocking: list[str] = []
+        for line in output.splitlines():
+            fields = _split_nmcli_fields(line)
+            if len(fields) < 3:
+                continue
+            name, connection_uuid, profile_type = fields[:3]
+            if profile_type.casefold() not in _WIFI_PROFILE_TYPES:
+                continue
+            try:
+                uuid.UUID(connection_uuid)
+            except ValueError:
+                raise NetworkManagerError(
+                    "NetworkManager returned an invalid Wi-Fi profile ID."
+                ) from None
+            profile_interface = (
+                await self._run(
+                    "--get-values",
+                    "connection.interface-name",
+                    "connection",
+                    "show",
+                    "uuid",
+                    connection_uuid,
+                )
+            ).strip()
+            autoconnect = (
+                await self._run(
+                    "--get-values",
+                    "connection.autoconnect",
+                    "connection",
+                    "show",
+                    "uuid",
+                    connection_uuid,
+                )
+            ).strip()
+            if autoconnect.casefold() == "no":
+                continue
+            if profile_interface in {"", "--", interface}:
+                blocking.append(name or "unnamed profile")
+        return blocking
 
     async def set_managed(self, interface: str, managed: bool) -> None:
         """Allow or release an interface from NetworkManager control."""

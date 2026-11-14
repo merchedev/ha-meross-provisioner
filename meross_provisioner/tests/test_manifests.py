@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -16,7 +17,7 @@ def test_app_manifests_are_consistent_and_least_privileged() -> None:
     dockerfile = (APP_DIR / "Dockerfile").read_text(encoding="utf-8")
 
     assert app["slug"] == "meross_provisioner"
-    assert app["version"] == "0.1.6"
+    assert app["version"] == "0.1.7"
     project = tomllib.loads(
         (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     )
@@ -43,10 +44,20 @@ def test_app_manifests_are_consistent_and_least_privileged() -> None:
     assert (APP_DIR / "DOCS.md").is_file()
     assert (APP_DIR / "README.md").is_file()
     changelog = (APP_DIR / "CHANGELOG.md").read_text(encoding="utf-8")
-    first_release = next(
-        (line for line in changelog.splitlines() if line.startswith("## ")), ""
+    release_headings = [
+        line for line in changelog.splitlines() if line.startswith("## ")
+    ]
+    assert release_headings[0] == f"## {app['version']}"
+    assert all(re.fullmatch(r"## \d+\.\d+\.\d+", line) for line in release_headings)
+    installed_version = release_headings[1].removeprefix("## ")
+    release_notes = re.search(
+        rf"^#* {re.escape(app['version'])}\n"
+        rf"(?:^(?!#* {re.escape(installed_version)}).*\n)*",
+        changelog,
+        re.MULTILINE,
     )
-    assert first_release.startswith(f"## {app['version']} ")
+    assert release_notes is not None
+    assert f"## {installed_version}" not in release_notes.group(0)
     for language in ("en", "es"):
         translations = yaml.safe_load(
             (APP_DIR / "translations" / f"{language}.yaml").read_text(encoding="utf-8")
