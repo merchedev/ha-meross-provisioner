@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 — use a Python-enabled Home Assistant base image
+
+- Pin the app image to Home Assistant's Python base image.
+- Remove the deprecated per-architecture `build.yaml` and build with `python -m pip`.
+- Add an amd64 Docker image build to CI and bump the app version.
+
 ## 0.1.0 — initial experimental prototype
 
 - Add a Home Assistant Ingress app skeleton with Supervisor preflight and recovery.

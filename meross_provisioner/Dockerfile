@@ -1,5 +1,4 @@
-ARG BUILD_FROM=python:3.12-alpine
-FROM ${BUILD_FROM}
+FROM ghcr.io/home-assistant/base-python:3.14-alpine3.24
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -8,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
+RUN python -m pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 
 COPY src/ ./src/
 COPY run.sh ./run.sh
