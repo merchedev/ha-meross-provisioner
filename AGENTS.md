@@ -16,6 +16,8 @@ These instructions apply to the whole repository.
 - Prefer small, composable functions and existing abstractions over duplicated logic.
 - Add comments for non-obvious protocol, lifecycle, security, or compatibility decisions—not for self-explanatory code.
 - Add or update tests for behavior changes, and update user-facing documentation whenever setup, permissions, compatibility, or recovery behavior changes.
+- For every app version change, update `meross_provisioner/CHANGELOG.md`; Home Assistant reads the app-folder changelog for update dialogs. Keep translated option help and `DOCS.md` in sync with `config.yaml`.
+- For every app version change, update `meross_provisioner/CHANGELOG.md`; Home Assistant reads the app-folder changelog for update dialogs. Keep translated option help and `DOCS.md` in sync with `config.yaml`.
 - Do not delegate work to subagents unless the user explicitly requests delegation.
 - Do not commit, push, publish releases, or change remote repository settings unless the user explicitly asks.
 

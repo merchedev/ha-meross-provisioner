@@ -37,3 +37,9 @@ jobs:
             --load \
             --tag meross-provisioner:ci \
             meross_provisioner
+      - run: |
+          docker run --rm \
+            --env SUPERVISOR_TOKEN=ci-dummy-token \
+            meross-provisioner:ci \
+            /command/with-contenv bash -c \
+            'test -n "$SUPERVISOR_TOKEN" && python -c "import meross_provisioner.web"'

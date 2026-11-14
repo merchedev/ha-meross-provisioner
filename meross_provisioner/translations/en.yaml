@@ -1,0 +1,18 @@
+configuration:
+  wifi_interface:
+    name: Wi-Fi interface
+    description: >-
+      Host Wi-Fi interface used by the access-point app. On a Raspberry Pi 5
+      this is often wlan0. Use the same interface configured in that app; it
+      must be dedicated to the AP and available for temporary client mode.
+  access_point_addon_slug:
+    name: Access-point app slug
+    description: >-
+      Full Supervisor slug of the app that creates HA-AP, not its display name.
+      Start Provisioner with this blank to see installed app slugs in its UI,
+      then copy the exact AP app slug here and restart Provisioner.
+  ingress_peer_ip:
+    name: Ingress proxy IP
+    description: >-
+      Internal IP address of the Home Assistant Supervisor Ingress proxy.
+      Keep the default 172.30.32.2 unless your internal Supervisor network differs.

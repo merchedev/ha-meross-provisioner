@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3 — fix Supervisor environment at startup
+
+- Start through S6 `with-contenv` so the Supervisor token reaches the app.
+- Set the Python source path explicitly and verify the web module imports during image build.
+- Add translated configuration help and a Home Assistant documentation tab.
+
 ## 0.1.2 — fix package discovery at runtime
 
 - Export the application source path in the startup script.

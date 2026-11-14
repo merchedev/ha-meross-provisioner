@@ -1,0 +1,18 @@
+configuration:
+  wifi_interface:
+    name: Interfaz Wi-Fi
+    description: >-
+      Interfaz Wi-Fi del host que usa el add-on del punto de acceso. En una
+      Raspberry Pi 5 suele ser wlan0. Debe coincidir con la interfaz configurada
+      en ese add-on y estar dedicada al AP.
+  access_point_addon_slug:
+    name: Slug del add-on de punto de acceso
+    description: >-
+      Slug completo del Supervisor del add-on que crea HA-AP; no es su nombre
+      visible. Puedes iniciar Provisioner con este campo vacío para ver los slugs
+      instalados en su interfaz, copiar el de Hass.io Access Point aquí y reiniciar.
+  ingress_peer_ip:
+    name: IP del proxy Ingress
+    description: >-
+      Dirección IP interna del proxy Ingress de Home Assistant. Deja 172.30.32.2
+      salvo que la red interna del Supervisor use otra dirección.

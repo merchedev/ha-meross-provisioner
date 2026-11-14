@@ -23,6 +23,7 @@ The initial target is a wired Home Assistant OS installation with a dedicated Wi
 
 - `AGENTS.md` — coding-agent rules and safety requirements.
 - `meross_provisioner/` — Home Assistant app, ingress UI, protocol and platform code.
+- `meross_provisioner/CHANGELOG.md` — version notes shown in Home Assistant's update dialog.
 - `docs/` — architecture, protocol notes, hardware support, security, and setup guides.
 - `meross_provisioner/tests/` — hardware-free tests using fakes and protocol fixtures.
 
@@ -54,6 +55,7 @@ Do not point a production Home Assistant installation at this experimental proto
 - [Meross setup protocol](docs/meross-protocol.md)
 - [Hardware and platform support](docs/platform-support.md)
 - [Home Assistant OS / Raspberry Pi 5 guide](docs/haos-rpi5.md)
+- [Home Assistant app changelog](meross_provisioner/CHANGELOG.md)
 - [Security](SECURITY.md)
 - [Development and testing](docs/development.md)
 

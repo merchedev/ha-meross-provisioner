@@ -15,6 +15,8 @@ Thanks for helping make Meross onboarding safer and easier to understand.
 - Prefer type hints, small functions, explicit errors, and tests over comments that repeat the code.
 - Add a regression test for every bug fix. Hardware-free tests must be the default; live-device tests are opt-in and documented.
 - Update compatibility documentation when a model, firmware, OS, adapter, or AP app is tested.
+- When changing the app version, add a user-facing entry to `meross_provisioner/CHANGELOG.md` and keep the app translations and `DOCS.md` in sync.
+- When changing the app version, add a user-facing entry to `meross_provisioner/CHANGELOG.md` and keep the app translations and `DOCS.md` in sync.
 
 Run the checks listed in [`AGENTS.md`](AGENTS.md) before submitting a pull request. Pull requests should describe the hardware and software versions used for any physical test.
 

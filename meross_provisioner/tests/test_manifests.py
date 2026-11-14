@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import yaml
+
+from meross_provisioner import __version__
 
 APP_DIR = Path(__file__).parents[1]
 REPOSITORY_ROOT = Path(__file__).parents[2]
@@ -13,7 +16,11 @@ def test_app_manifests_are_consistent_and_least_privileged() -> None:
     dockerfile = (APP_DIR / "Dockerfile").read_text(encoding="utf-8")
 
     assert app["slug"] == "meross_provisioner"
-    assert app["version"] == "0.1.2"
+    assert app["version"] == "0.1.3"
+    project = tomllib.loads(
+        (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    assert project["project"]["version"] == app["version"] == __version__
     assert set(app["arch"]) == {"aarch64", "amd64"}
     assert app["ingress"] is True
     assert app["hassio_api"] is True
@@ -28,7 +35,21 @@ def test_app_manifests_are_consistent_and_least_privileged() -> None:
     assert not (APP_DIR / "build.yaml").exists()
 
     run_script = (APP_DIR / "run.sh").read_text(encoding="utf-8")
+    assert run_script.startswith("#!/command/with-contenv bash")
     assert 'export PYTHONPATH="/app/src${PYTHONPATH:+:$PYTHONPATH}"' in run_script
+    assert (APP_DIR / "CHANGELOG.md").is_file()
+    assert (APP_DIR / "DOCS.md").is_file()
+    assert (APP_DIR / "README.md").is_file()
+    changelog = (APP_DIR / "CHANGELOG.md").read_text(encoding="utf-8")
+    first_release = next(
+        (line for line in changelog.splitlines() if line.startswith("## ")), ""
+    )
+    assert first_release.startswith(f"## {app['version']} ")
+    for language in ("en", "es"):
+        translations = yaml.safe_load(
+            (APP_DIR / "translations" / f"{language}.yaml").read_text(encoding="utf-8")
+        )
+        assert set(translations["configuration"]) == set(app["schema"])
 
 
 def test_repository_metadata_matches_the_online_addon_repository() -> None:
