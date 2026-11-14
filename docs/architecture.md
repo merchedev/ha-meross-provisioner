@@ -41,7 +41,7 @@ The web service accepts requests only from the Supervisor's internal Ingress pro
 
 The transaction must always have a timeout, a cancel operation, and a startup recovery path. The journal must never contain passwords, device keys, or raw request bodies.
 
-The first hardware run (MSS210 US, firmware 4.2.9) followed this lifecycle end to end. The target was the same AP that Provisioner stopped, so the device could not see it during provisioning; the workflow used the AP app's saved SSID/channel/MAC metadata and restored the AP immediately after the device acknowledged the write. Local control was then added with the Meross LAN HACS integration over HTTP. Device control, cloud binding, and local MQTT binding remain outside this project.
+Hardware runs on an MSS210 US (firmware 4.2.9), MSS425E, MSS425FC, and MSL430 followed this lifecycle end to end. For the MSS210 US, the target was the same AP that Provisioner stopped, so the device could not see it during provisioning; the workflow used the AP app's saved SSID/channel/MAC metadata and restored the AP immediately after the device acknowledged the write. Local control was added with the Meross LAN HACS integration over HTTP using an empty device key. The unbound LED behavior was model-specific: the MSS210 US kept blinking, while the MSS425FC and MSL430 did not. Device control, cloud binding, and local MQTT binding remain outside this project.
 
 ## Network profile safety
 

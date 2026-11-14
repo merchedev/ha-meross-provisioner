@@ -1,6 +1,6 @@
 # Home Assistant OS on Raspberry Pi 5
 
-This is the initial target. The first end-to-end Wi-Fi-only provisioning succeeded on an MSS210 US, firmware 4.2.9, in November 2026. Treat the setup as experimental until the recovery checks and your exact AP app/model combination have been repeated.
+This is the initial target. End-to-end Wi-Fi-only provisioning succeeded on an MSS210 US (firmware 4.2.9), MSS425E, MSS425FC, and MSL430 in November 2026. Firmware versions for the last three were not recorded. Treat the setup as experimental until the recovery checks and your exact AP app/model combination have been repeated.
 
 ## Intended network layout
 
@@ -41,7 +41,7 @@ The app requests the Supervisor `manager` role to stop/start the AP app and host
 5. Enter the target SSID and password in the UI. They are sent only for this operation; do not paste them into logs or issues.
 6. Confirm the displayed model/firmware before accepting the Wi-Fi write.
 7. Verify that the AP app was restored and its original SSID/DHCP settings are active. Then confirm the device appears in the AP's DHCP leases. If the LED keeps blinking green, see [After provisioning](post-provisioning.md): it usually means the device is connected but unbound to Meross cloud/MQTT, not that Wi-Fi provisioning failed.
-8. Add it to Home Assistant using the appropriate local integration: HomeKit Device when supported, or [Meross LAN](https://github.com/krahabb/meross_lan) over HTTP. The official Meross integration uses the cloud and is not required for local control.
+8. Add it to Home Assistant using the appropriate local integration: HomeKit Device when supported, or [Meross LAN](https://github.com/krahabb/meross_lan) over HTTP. Leave the Meross LAN device key empty. If adding fails, restart the AP app first and wait for the device to reconnect. The official Meross integration uses the cloud and is not required for local control.
 
 Stop testing immediately if the AP app fails to restore. Since HA is wired, use the normal Home Assistant UI to start it again. Do not attempt to repair host networking with unreviewed shell commands.
 

@@ -1,11 +1,18 @@
 # Changelog
 
+## 0.1.18
+
+- Record verified Wi-Fi provisioning on MSS425E, MSS425FC, and MSL430.
+- Document that the Meross LAN device key must be left empty.
+- Document restarting the AP app before adding a device when Meross LAN returns an error.
+- Clarify that unbound LED behavior is model/firmware-specific.
+
 ## 0.1.17
 
 - Document the first successful MSS210 US firmware 4.2.9 provisioning run.
 - Add post-provisioning, Meross LAN, LED/unbound, and local MQTT binding guidance.
 - Add a troubleshooting and FAQ guide covering the observed errors.
-- Record verified hardware status; MSS425FC and MSL430 remain untested.
+- Record the verified hardware status at that time; MSS425E, MSS425FC, and MSL430 were confirmed in 0.1.18.
 
 ## 0.1.16
 

@@ -35,8 +35,10 @@ For models without HomeKit, the recommended local option is [Meross LAN](https:/
 3. Go to **Settings → Devices & services → Add integration → Meross LAN**.
 4. Choose the manual device option. Do not choose the MQTT hub or the Meross cloud account.
 5. Enter the device IP address.
-6. Leave the device key empty and let Meross LAN try the local key fallback.
+6. Leave the device key empty and let Meross LAN try the local key fallback. In the verified setup, entering any key caused an invalid-key error.
 7. Set the protocol to **HTTP** (or leave it on Auto) to keep normal control local.
+
+If Meross LAN reports an invalid key or cannot add the device, restart the Hass.io Access Point app first. Wait for the device to reassociate and obtain its DHCP lease, then add it again with the IP and an empty key. This order was required in the verified setup.
 
 The official **Meross** integration in Home Assistant Core uses the Meross cloud account. It is not required for local control and is not the integration described here.
 
@@ -55,6 +57,8 @@ The LED reflects the device firmware state, not only the relay state.
 | Off | No power or LED disabled |
 
 Provisioner intentionally does not send `Appliance.Config.Key` or complete a Meross cloud/MQTT binding. On some firmware, the device therefore stays in the “connected but unbound” state and keeps blinking green even though local HTTP control works.
+
+This behavior is model/firmware-dependent. In the verified setup, the MSS210 US kept blinking green, while the MSS425FC and MSL430 did not keep blinking after provisioning. Do not treat the LED alone as proof that provisioning failed; check the DHCP lease and local control first.
 
 Meross LAN exposes a **DND / LED** entity for many plugs. Turning it off/on disables the status LED. In Meross LAN the DND logic is inverted relative to the Meross app, so test both positions. Disabling the LED also removes the visual on/off indication.
 

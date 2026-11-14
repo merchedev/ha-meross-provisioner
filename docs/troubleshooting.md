@@ -1,6 +1,6 @@
 # Troubleshooting and FAQ
 
-This page collects the symptoms observed during development and the first hardware test. Version references describe when a fix was introduced; check the installed version in the app page.
+This page collects the symptoms observed during development and hardware testing. Version references describe when a fix was introduced; check the installed version in the app page.
 
 ## General questions
 
@@ -99,6 +99,8 @@ A minimal profile is not guaranteed to work on every firmware. If the device doe
 
 The device is probably connected to Wi-Fi but not bound to Meross cloud/MQTT. Provisioner only configures Wi-Fi and intentionally does not send `Appliance.Config.Key` or complete the cloud binding. Local HTTP control can still work.
 
+This behavior is model/firmware-dependent. In the verified setup, the MSS210 US kept blinking green, while the MSS425FC and MSL430 did not keep blinking after provisioning. A blinking LED is not by itself evidence that provisioning failed; check the DHCP lease and local control first.
+
 Options:
 
 1. Leave it blinking; control works.
@@ -115,6 +117,14 @@ Check in this order:
 4. **AP client isolation/internet access**: the device may need to reach the local broker or the Meross cloud. The AP app's client internet access setting controls NAT to the wired LAN.
 5. **Binding**: a device that cannot complete its Meross binding may reboot periodically. Local MQTT binding is the advanced remedy.
 
+### Meross LAN asks for a device key or reports an invalid key
+
+Leave the device key **empty**. In the verified setup, entering any key produced an invalid-key error; the empty-key local fallback worked. The Meross account password is not the device key.
+
+### Meross LAN cannot add the device after provisioning
+
+Restart the Hass.io Access Point app, wait for the device to reassociate and obtain its DHCP lease, then add it with Meross LAN using its IP and an empty device key. This order was required in the verified setup; adding the device before the AP restart returned an error.
+
 ### “Meross LAN only lets me add hubs and asks for my Meross account”
 
 That is the official **Meross** integration or the Meross cloud/MQTT hub option, not local device control. Use the HACS integration [Meross LAN](https://github.com/krahabb/meross_lan):
@@ -130,8 +140,9 @@ That is how the device works. The LED has a single status light; it does not exp
 
 ## Known limitations
 
-- Wi-Fi provisioning is verified on an MSS210 US with firmware 4.2.9. MSS425FC and MSL430 remain untested.
-- Device control is not implemented by Provisioner. Use HomeKit Device or Meross LAN.
+- Wi-Fi provisioning is verified on MSS210 US firmware 4.2.9, MSS425E, MSS425FC, and MSL430. Firmware versions for the last three were not recorded.
+- LED behavior after provisioning is model/firmware-dependent: MSS210 US kept blinking in the unbound state, while MSS425FC and MSL430 did not.
+- Device control is not implemented by Provisioner. Use HomeKit Device or Meross LAN. Leave the Meross LAN device key empty.
 - The vendor firmware may still contact Meross cloud services after joining Wi-Fi. Omitting `Appliance.Config.Key` is not a guarantee of cloud isolation.
 - Local MQTT binding is outside Provisioner and has not been hardware-verified by this project.
-- Recovery behavior is tested with mocks and the first hardware run; unusual AP apps, drivers, or interrupted transactions may still require manual recovery.
+- Recovery behavior is tested with mocks and hardware runs; unusual AP apps, drivers, or interrupted transactions may still require manual recovery.

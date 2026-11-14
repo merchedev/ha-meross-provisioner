@@ -28,7 +28,7 @@ The app makes no Meross cloud requests, but omitting `Appliance.Config.Key` is n
 
 ## Verified observation
 
-On an MSS210 US running firmware 4.2.9, the Wi-Fi-only flow succeeded without a Meross account: the device accepted `Appliance.Config.Wifi`, rebooted, associated to the target AP, and completed the WPA 4-way handshake. The device remained in the unbound LED state because `Appliance.Config.Key` and the bind exchange were intentionally not sent. Local HTTP control worked through the Meross LAN custom integration. Other models and firmware revisions remain unverified.
+On an MSS210 US running firmware 4.2.9, and on MSS425E, MSS425FC, and MSL430 devices, the Wi-Fi-only flow succeeded without a Meross account: the device accepted `Appliance.Config.Wifi`, rebooted, associated to the target AP, and completed the WPA 4-way handshake. Firmware versions for the MSS425E/MSS425FC/MSL430 were not recorded. The MSS210 US remained in the unbound LED state because `Appliance.Config.Key` and the bind exchange were intentionally not sent; the MSS425FC and MSL430 did not keep blinking. Local HTTP control worked through the Meross LAN custom integration with an empty device key. Other firmware revisions remain unverified.
 
 ## Credential encoding and transport security
 

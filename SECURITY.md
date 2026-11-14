@@ -24,7 +24,7 @@ Please do not publish credentials, packet captures, or a working exploit in an i
 
 ## Verified test
 
-The first hardware test (MSS210 US, firmware 4.2.9) used Wi-Fi-only provisioning and local HTTP control through the Meross LAN HACS integration. No Meross account, `Appliance.Config.Key`, or MQTT binding was configured. The device remained in the unbound LED state. This does not prove that the firmware never contacts vendor servers; apply egress rules if cloud isolation is required.
+Hardware tests on MSS210 US (firmware 4.2.9), MSS425E, MSS425FC, and MSL430 used Wi-Fi-only provisioning and local HTTP control through the Meross LAN HACS integration with an empty device key. No Meross account, `Appliance.Config.Key`, or MQTT binding was configured. The MSS210 US remained in the unbound LED state; the MSS425FC and MSL430 did not keep blinking. This does not prove that the firmware never contacts vendor servers; apply egress rules if cloud isolation is required.
 
 ## Known risks
 

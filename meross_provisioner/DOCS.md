@@ -1,6 +1,6 @@
 # Meross Provisioner — guía de uso
 
-**Prototipo experimental. La primera provisión real se completó con un MSS210 US, firmware 4.2.9, sobre Home Assistant OS y Raspberry Pi 5. Otros modelos y versiones siguen sin verificar.**
+**Prototipo experimental. Provisión Wi‑Fi verificada en MSS210 US (firmware 4.2.9), MSS425E, MSS425FC y MSL430. El firmware de los tres últimos no se registró. Otras versiones siguen sin verificar.**
 
 Provisioner configura únicamente la Wi‑Fi del dispositivo. No implementa el control del enchufe, la nube de Meross ni el binding MQTT. Para controlarlo después, usa **HomeKit Device** si el modelo lo admite o **Meross LAN** por HTTP local.
 
@@ -43,7 +43,7 @@ Si algo falla, el diario de transacción y la recuperación automática intentan
 2. Espera 30–60 segundos y busca una concesión DHCP para la MAC del resultado. La reserva DHCP de la app AP es la forma más cómoda de fijar la IP.
 3. Añade el dispositivo a Home Assistant:
    - **HomeKit Device** si el modelo lo admite. Usa el código de la etiqueta; no lo publiques.
-   - **Meross LAN** para control local por HTTP: [github.com/krahabb/meross_lan](https://github.com/krahabb/meross_lan). Instálalo desde HACS, reinicia Home Assistant, añade la integración **Meross LAN** (no la integración oficial **Meross**), elige dispositivo manual, introduce la IP y deja la clave vacía. Fuerza el protocolo **HTTP** si quieres control local.
+   - **Meross LAN** para control local por HTTP: [github.com/krahabb/meross_lan](https://github.com/krahabb/meross_lan). Instálalo desde HACS, reinicia Home Assistant, añade la integración **Meross LAN** (no la integración oficial **Meross**), elige dispositivo manual, introduce la IP y deja la clave **vacía**. Si pones una clave, Meross LAN puede responder que es incorrecta. Si no añade el dispositivo, reinicia primero la app AP, espera a que el Meross se reconecte y vuelve a añadirlo con la clave vacía. Fuerza el protocolo **HTTP** si quieres control local.
    - La integración oficial **Meross** de Home Assistant Core usa la nube y pide cuenta. No es necesaria para control local.
 
 ### La luz verde
@@ -58,7 +58,7 @@ Si algo falla, el diario de transacción y la recuperación automática intentan
 | Rojo fijo | Sin conexión a internet |
 | Apagada | Sin alimentación o LED desactivado |
 
-Provisioner no configura `Appliance.Config.Key` ni completa el binding de Meross. Por eso el enchufe puede quedarse parpadeando en verde aunque Meross LAN lo controle por HTTP. No es un fallo de la provisión.
+Provisioner no configura `Appliance.Config.Key` ni completa el binding de Meross. Por eso el enchufe puede quedarse parpadeando en verde aunque Meross LAN lo controle por HTTP. No es un fallo de la provisión. El comportamiento depende del modelo/firmware: en la prueba realizada, el MSS210 US siguió parpadeando; el MSS425FC y las MSL430 no se quedaron parpadeando. No uses solo el LED para decidir si la provisión funcionó: comprueba la concesión DHCP y el control local.
 
 Meross LAN suele exponer una entidad **DND/LED** que apaga el LED. En Meross LAN la lógica está invertida respecto a la app de Meross, así que prueba ambas posiciones. Apagar el LED también elimina la señal visual de encendido.
 
@@ -118,6 +118,14 @@ Desde 0.1.16 se intentan varias fuentes para la MAC y el canal. Si aun así falt
 
 Revisa en este orden: DHCP activo y con direcciones libres; errores WPA/4‑way handshake en el log del AP; canal 12/13 (mejor 1, 6 u 11); y el binding de Meross. Si el handshake WPA se completa, la contraseña es correcta.
 
+### Meross LAN me pide una clave o dice que es incorrecta
+
+Deja el campo **Device key vacío**. En la prueba realizada, poner cualquier clave hacía que Meross LAN respondiera que era incorrecta; con la clave vacía funcionó el modo local. La contraseña de la cuenta de Meross no es la clave del dispositivo.
+
+### Meross LAN no añade el dispositivo después de provisionar
+
+Reinicia primero la app **Hass.io Access Point**, espera a que el Meross se reconecte y obtenga su concesión DHCP, y vuelve a añadirlo con Meross LAN usando la IP y la clave vacía. Ese orden fue necesario en la prueba realizada.
+
 ### Meross LAN solo me deja añadir hubs y me pide cuenta
 
 Estás usando la integración oficial **Meross** o la opción cloud/MQTT hub. Instala **Meross LAN** desde HACS y elige el dispositivo manual por IP. Deja la clave vacía y fuerza HTTP.
@@ -132,7 +140,8 @@ Es el comportamiento del dispositivo: hay un único LED de estado, no un modo �
 - Para configurar el dispositivo mientras `HA-AP` está detenido, Provisioner lee de la app AP su SSID, canal y visibilidad, y la MAC de la interfaz. No guarda, muestra ni envía la contraseña de la app AP.
 - La app requiere el rol `manager` del Supervisor para escanear redes y detener/iniciar el add-on AP.
 - Provisioner no configura la nube ni MQTT. No se garantiza que el firmware no contacte con Meross después de unirse a la Wi‑Fi; aplica reglas de salida si necesitas aislamiento.
-- La provisión Wi‑Fi está verificada con MSS210 US, firmware 4.2.9. MSS425FC y MSL430 siguen sin verificar.
+- La provisión Wi‑Fi está verificada con MSS210 US (firmware 4.2.9), MSS425E, MSS425FC y MSL430. El firmware de los tres últimos no se registró.
+- El LED tras provisionar depende del modelo/firmware: el MSS210 US siguió parpadeando; el MSS425FC y las MSL430 no.
 - El control del dispositivo no forma parte de este proyecto. Usa HomeKit Device o Meross LAN.
 
 ## 7. Más información

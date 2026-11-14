@@ -6,7 +6,7 @@ Compatibility is a property of the complete combination: device model/revision/f
 
 | Platform / hardware | Status | Requirements and limitations |
 | --- | --- | --- |
-| Raspberry Pi 5, Home Assistant OS, Ethernet + internal Wi-Fi | **First successful Wi-Fi-only provisioning; still experimental** | MSS210 US firmware 4.2.9, November 2026. Ethernet stayed connected. The app used host D-Bus/NetworkManager to temporarily claim `wlan0` after the AP app stopped. The AP app restored its SSID/DHCP settings. |
+| Raspberry Pi 5, Home Assistant OS, Ethernet + internal Wi-Fi | **Wi-Fi-only provisioning verified on several models; still experimental** | MSS210 US 4.2.9, MSS425E, MSS425FC, and MSL430 confirmed by the project owner. Ethernet stayed connected. The app used host D-Bus/NetworkManager to temporarily claim `wlan0` after the AP app stopped and restored the AP app afterwards. Firmware versions for the MSS425E/MSS425FC/MSL430 were not recorded. |
 | Other Home Assistant OS hardware | **Not tested** | Needs a NetworkManager-visible wireless device, host D-Bus access, a working station mode, and a supported AP app lifecycle. |
 | Home Assistant Supervised | **Planned / not tested** | Requires Supervisor API access, host D-Bus, and NetworkManager behavior equivalent to the HAOS backend. |
 | Home Assistant Container / Core | **Not supported by the first adapter** | No Supervisor app API or host D-Bus integration. A separate, narrowly scoped Linux backend is required. |
@@ -29,6 +29,22 @@ If any condition cannot be established, the app should refuse to provision and e
 
 ## Verified test records
 
+### Wi-Fi-only provisioning matrix
+
+| Model | Firmware | Wi-Fi provisioning | LED after provisioning |
+| --- | --- | --- | --- |
+| MSS210 US | 4.2.9 | Verified | Kept blinking green (unbound state) |
+| MSS425E | Not recorded | Verified by project owner | Not recorded |
+| MSS425FC | Not recorded | Verified by project owner | Did not keep blinking |
+| MSL430 | Not recorded | Verified by project owner | Did not keep blinking |
+
+The MSS425E, MSS425FC, and MSL430 results were confirmed in the same Home Assistant OS / Raspberry Pi 5 setup. Local control was verified with the Meross LAN HACS integration over HTTP. In that setup:
+
+- The Meross LAN device key had to be left **empty**; entering a key produced an invalid-key error.
+- If Meross LAN failed to add the device, restarting the Hass.io Access Point app and waiting for the device to reconnect resolved it.
+
+Firmware versions for these three models were not recorded. Add them when a test report is available.
+
 ### MSS210 US, firmware 4.2.9 (2026-11-14)
 
 - Platform: Raspberry Pi 5, Home Assistant OS, Ethernet management, internal Wi-Fi running a compatible access-point app on `wlan0`.
@@ -37,7 +53,7 @@ If any condition cannot be established, the app should refuse to provision and e
 - Result: Provisioner stopped the AP, scanned and selected the setup AP, joined it, read the device identity/Wi-Fi list, sent `Appliance.Config.Wifi`, and restored the AP. After the reboot the device associated to the target AP and completed the WPA 4-way handshake.
 - Local control: the device was added to Home Assistant with the Meross LAN HACS integration over HTTP using its DHCP reservation. No Meross cloud account was used.
 - LED: the device kept blinking green even though local HTTP control worked; this is consistent with the “connected but unbound” state. The Meross LAN DND/LED entity could disable the LED, at the cost of losing the visual status.
-- Not verified: local MQTT binding, MSS425FC, MSL430, other firmware revisions, and long-term stability.
+- Not verified in this record: local MQTT binding, MSS425E/MSS425FC/MSL430 firmware details, other firmware revisions, and long-term stability.
 
 ## Device support
 
@@ -50,4 +66,4 @@ The project begins with a protocol discovery step, not a blanket device claim. E
 - Whether Home Assistant's native HomeKit Device integration discovers it afterwards, if applicable.
 - Test date and HAOS/Supervisor/AP app versions.
 
-MSS210 US firmware 4.2.9 now has a verified Wi-Fi-only provisioning record. MSS425FC and MSL430 remain initial test targets only. The current code must not label a model as tested until a physical test report has been added.
+MSS210 US firmware 4.2.9, MSS425E, MSS425FC, and MSL430 now have a verified Wi-Fi-only provisioning record. The MSS425E/MSS425FC/MSL430 firmware versions are still unknown. Other models and firmware revisions remain initial test targets only. The current code must not label a model as tested until a physical test report has been added.
