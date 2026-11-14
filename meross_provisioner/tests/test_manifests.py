@@ -16,7 +16,7 @@ def test_app_manifests_are_consistent_and_least_privileged() -> None:
     dockerfile = (APP_DIR / "Dockerfile").read_text(encoding="utf-8")
 
     assert app["slug"] == "meross_provisioner"
-    assert app["version"] == "0.1.4"
+    assert app["version"] == "0.1.6"
     project = tomllib.loads(
         (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     )
@@ -25,11 +25,13 @@ def test_app_manifests_are_consistent_and_least_privileged() -> None:
     assert app["ingress"] is True
     assert app["hassio_api"] is True
     assert app["hassio_role"] == "manager"
+    assert app["host_dbus"] is True
     assert "privileged" not in app
     assert app.get("host_network", False) is False
     assert dockerfile.startswith(
         "FROM ghcr.io/home-assistant/base-python:3.14-alpine3.24"
     )
+    assert "apk add --no-cache networkmanager-cli" in dockerfile
     assert "python -m pip install" in dockerfile
     assert 'RUN python -c "import meross_provisioner.web"' in dockerfile
     assert not (APP_DIR / "build.yaml").exists()

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.6 — support AP-managed Wi-Fi interfaces
+
+- Use NetworkManager over host D-Bus when the AP app marks its Wi-Fi device unmanaged.
+- Scan and connect with a UUID-scoped temporary profile; preserve other profiles.
+- Improve preflight diagnostics for interfaces NetworkManager cannot see.
+
+## 0.1.5 — support AP-managed Wi-Fi interfaces
+
+- Use NetworkManager over host D-Bus for interfaces marked unmanaged by the AP app.
+- Create and remove only a uniquely identified temporary Wi-Fi connection.
+- Add NetworkManager preflight and parser tests.
+
 ## 0.1.4 — improve network preflight diagnostics
 
 - Include the failing Supervisor endpoint in safe preflight errors.

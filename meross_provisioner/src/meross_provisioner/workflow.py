@@ -7,7 +7,8 @@ import ipaddress
 import logging
 import re
 import secrets
-from collections.abc import Callable, Mapping
+import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -15,6 +16,7 @@ from typing import Any, Protocol
 from .errors import (
     ConfigurationError,
     DeviceProtocolError,
+    NetworkManagerError,
     RecoveryError,
     SafetyCheckError,
     SessionError,
@@ -33,21 +35,12 @@ from .models import (
 
 _LOGGER = logging.getLogger(__name__)
 _BSSID_RE = re.compile(r"^(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$")
-_TEMP_ROUTE_METRIC = 700
 
 
 class SupervisorPort(Protocol):
     """Operations required from a host/platform adapter."""
 
     async def get_network_info(self) -> dict[str, Any]: ...
-
-    async def get_interface_info(self, interface: str) -> dict[str, Any]: ...
-
-    async def scan_access_points(self, interface: str) -> list[dict[str, Any]]: ...
-
-    async def update_interface(
-        self, interface: str, body: Mapping[str, Any]
-    ) -> None: ...
 
     async def get_addon_info(self, slug: str) -> dict[str, Any]: ...
 
@@ -58,6 +51,30 @@ class SupervisorPort(Protocol):
     async def start_addon(self, slug: str) -> None: ...
 
     async def restart_addon(self, slug: str) -> None: ...
+
+
+class NetworkManagerPort(Protocol):
+    """Operations for the AP interface, which may be unmanaged by Supervisor."""
+
+    async def get_device_info(self, interface: str) -> dict[str, str]: ...
+
+    async def has_saved_wifi_profiles(self) -> bool: ...
+
+    async def set_managed(self, interface: str, managed: bool) -> None: ...
+
+    async def scan_access_points(self, interface: str) -> list[AccessPoint]: ...
+
+    async def create_open_connection(
+        self, interface: str, ssid: str, bssid: str, connection_uuid: str
+    ) -> None: ...
+
+    async def activate_connection(
+        self, interface: str, connection_uuid: str
+    ) -> None: ...
+
+    async def get_gateway(self, interface: str) -> str: ...
+
+    async def delete_connection(self, connection_uuid: str) -> None: ...
 
 
 class DevicePort(Protocol):
@@ -92,7 +109,7 @@ class PreflightReport:
     ethernet_interface: str | None
     access_point_addon_slug: str
     access_point_addon_state: str | None
-    current_wifi_mode: str | None
+    wifi_device_state: str | None
     issues: tuple[str, ...]
     warnings: tuple[str, ...]
 
@@ -104,7 +121,7 @@ class PreflightReport:
             "ethernet_interface": self.ethernet_interface,
             "access_point_addon_slug": self.access_point_addon_slug,
             "access_point_addon_state": self.access_point_addon_state,
-            "current_wifi_mode": self.current_wifi_mode,
+            "wifi_device_state": self.wifi_device_state,
             "issues": list(self.issues),
             "warnings": list(self.warnings),
         }
@@ -116,11 +133,13 @@ class ProvisioningWorkflow:
     def __init__(
         self,
         supervisor: SupervisorPort,
+        network_manager: NetworkManagerPort,
         device_factory: DeviceFactory,
         journal: TransactionJournal,
         config: WorkflowConfig,
     ) -> None:
         self._supervisor = supervisor
+        self._network_manager = network_manager
         self._device_factory = device_factory
         self._journal = journal
         self._config = config
@@ -162,14 +181,23 @@ class ProvisioningWorkflow:
                 ethernet_interface=None,
                 access_point_addon_slug=self._config.access_point_addon_slug,
                 access_point_addon_state=None,
-                current_wifi_mode=None,
+                wifi_device_state=None,
                 issues=tuple(issues),
                 warnings=tuple(warnings),
             )
 
         try:
             network = await self._supervisor.get_network_info()
-        except SupervisorError as err:
+            wifi_device = await self._network_manager.get_device_info(
+                self._config.wifi_interface
+            )
+            has_saved_wifi_profiles = (
+                await self._network_manager.has_saved_wifi_profiles()
+            )
+            addon = await self._supervisor.get_addon_info(
+                self._config.access_point_addon_slug
+            )
+        except (SupervisorError, NetworkManagerError) as err:
             return PreflightReport(
                 ready=False,
                 wifi_interface=self._config.wifi_interface,
@@ -177,7 +205,7 @@ class ProvisioningWorkflow:
                 ethernet_interface=None,
                 access_point_addon_slug=self._config.access_point_addon_slug,
                 access_point_addon_state=None,
-                current_wifi_mode=None,
+                wifi_device_state=None,
                 issues=(str(err),),
                 warnings=tuple(warnings),
             )
@@ -185,32 +213,6 @@ class ProvisioningWorkflow:
         interfaces = network.get("interfaces", [])
         if not isinstance(interfaces, list):
             interfaces = []
-        wireless_interfaces = [
-            item
-            for item in interfaces
-            if isinstance(item, dict) and item.get("type") == "wireless"
-        ]
-        interface = next(
-            (
-                item
-                for item in wireless_interfaces
-                if item.get("interface") == self._config.wifi_interface
-            ),
-            None,
-        )
-        if interface is None:
-            available = (
-                ", ".join(
-                    str(item.get("interface", "?")) for item in wireless_interfaces
-                )
-                or "none"
-            )
-            issues.append(
-                f"The Supervisor network API does not list "
-                f"{self._config.wifi_interface!r}. Available Wi-Fi interfaces: "
-                f"{available}."
-            )
-
         ethernet = next(
             (
                 item
@@ -227,25 +229,20 @@ class ProvisioningWorkflow:
                 "Ethernet before switching its Wi-Fi."
             )
 
-        wifi_profile = interface.get("wifi") if interface is not None else None
-        current_mode = (
-            wifi_profile.get("mode") if isinstance(wifi_profile, dict) else None
-        )
-        if isinstance(wifi_profile, dict):
+        wifi_device_state = wifi_device.get("state", "unknown")
+        if wifi_device_state.casefold() not in {"unmanaged", "disconnected"}:
             issues.append(
-                "The Supervisor reports an existing Wi-Fi profile. This prototype "
-                "cannot safely snapshot and restore it, so it will not replace it."
+                "NetworkManager reports the AP interface in state "
+                f"{wifi_device_state!r}; expected unmanaged or disconnected."
+            )
+        if has_saved_wifi_profiles:
+            issues.append(
+                "NetworkManager has saved Wi-Fi profiles. Remove or safely disable "
+                "them before using this dedicated AP interface."
             )
 
-        addon_state: str | None = None
-        try:
-            addon = await self._supervisor.get_addon_info(
-                self._config.access_point_addon_slug
-            )
-            state = addon.get("state")
-            addon_state = str(state) if state is not None else None
-        except SupervisorError as err:
-            issues.append(str(err))
+        state = addon.get("state")
+        addon_state = str(state) if state is not None else None
         if addon_state != "started":
             issues.append(
                 "The configured AP app is not running; refusing a workflow "
@@ -255,15 +252,13 @@ class ProvisioningWorkflow:
         return PreflightReport(
             ready=not issues,
             wifi_interface=self._config.wifi_interface,
-            wifi_interface_type=(
-                str(interface.get("type")) if interface is not None else None
-            ),
+            wifi_interface_type=(str(wifi_device.get("type", "wireless"))),
             ethernet_interface=(
                 str(ethernet.get("interface")) if isinstance(ethernet, dict) else None
             ),
             access_point_addon_slug=self._config.access_point_addon_slug,
             access_point_addon_state=(str(addon_state) if addon_state else None),
-            current_wifi_mode=(str(current_mode) if current_mode else None),
+            wifi_device_state=wifi_device_state,
             issues=tuple(issues),
             warnings=tuple(warnings),
         )
@@ -319,10 +314,14 @@ class ProvisioningWorkflow:
                 await self._supervisor.stop_addon(ap_slug)
                 journal["phase"] = "ap_stopped"
                 self._journal.write(journal)
-                raw_access_points = await self._supervisor.scan_access_points(
+                await self._network_manager.set_managed(
+                    self._config.wifi_interface, True
+                )
+                journal["phase"] = "wifi_managed"
+                self._journal.write(journal)
+                access_points = await self._network_manager.scan_access_points(
                     self._config.wifi_interface
                 )
-                access_points = self._parse_access_points(raw_access_points)
                 candidates = [
                     ap
                     for ap in access_points
@@ -385,6 +384,7 @@ class ProvisioningWorkflow:
                 self._expiry_task = None
 
         profile_created = False
+        connection_uuid = str(uuid.uuid4())
         operation_error: BaseException | None = None
         result: ProvisioningResult | None = None
         try:
@@ -396,23 +396,18 @@ class ProvisioningWorkflow:
                     "phase": "connecting_to_device_ap",
                     "ap_was_running": True,
                     "remove_temporary_profile": True,
+                    "temporary_connection_uuid": connection_uuid,
                     "created_at": session.created_at.isoformat(),
                 }
             )
-            # A timed-out Supervisor response may still mean NetworkManager
-            # applied the change, so cleanup is required from this point.
+            # Journal the unique profile ID before creation so recovery can
+            # remove it if NetworkManager succeeds but the response times out.
             profile_created = True
-            await self._supervisor.update_interface(
+            await self._network_manager.create_open_connection(
                 session.interface,
-                {
-                    "wifi": {
-                        "mode": "infrastructure",
-                        "auth": "open",
-                        "ssid": selected_ap.ssid,
-                    },
-                    "ipv4": {"method": "auto", "route_metric": _TEMP_ROUTE_METRIC},
-                    "ipv6": {"method": "auto", "route_metric": _TEMP_ROUTE_METRIC},
-                },
+                selected_ap.ssid,
+                selected_ap.mac,
+                connection_uuid,
             )
             self._journal.write(
                 {
@@ -421,14 +416,17 @@ class ProvisioningWorkflow:
                     "phase": "temporary_profile_created",
                     "ap_was_running": True,
                     "remove_temporary_profile": True,
+                    "temporary_connection_uuid": connection_uuid,
                     "created_at": session.created_at.isoformat(),
                 }
             )
 
-            interface_info = await self._wait_for_connection(
-                session.interface, selected_ap.ssid
+            await self._network_manager.activate_connection(
+                session.interface, connection_uuid
             )
-            gateway = self._private_gateway(interface_info)
+            gateway = self._private_gateway(
+                await self._network_manager.get_gateway(session.interface)
+            )
             await self._check_route_overlap_async(gateway)
             device = self._device_factory(gateway)
             info = await device.get_device_info()
@@ -464,6 +462,9 @@ class ProvisioningWorkflow:
                         else "ap_stopped",
                         "ap_was_running": True,
                         "remove_temporary_profile": profile_created,
+                        "temporary_connection_uuid": (
+                            connection_uuid if profile_created else None
+                        ),
                     },
                     remove_temporary_profile=profile_created,
                 )
@@ -512,6 +513,7 @@ class ProvisioningWorkflow:
                 "phase": "ap_stopped",
                 "ap_was_running": True,
                 "remove_temporary_profile": False,
+                "temporary_connection_uuid": None,
             },
             remove_temporary_profile=False,
         )
@@ -521,11 +523,7 @@ class ProvisioningWorkflow:
         journal = self._journal.read()
         if journal is None:
             return None
-        phase = str(journal.get("phase", ""))
-        remove_profile = (
-            bool(journal.get("remove_temporary_profile"))
-            or phase == "temporary_profile_created"
-        )
+        remove_profile = bool(journal.get("remove_temporary_profile"))
         await self._restore_ap(journal, remove_temporary_profile=remove_profile)
         return "Recovered an interrupted transaction and restored the AP app."
 
@@ -545,6 +543,7 @@ class ProvisioningWorkflow:
                     "phase": "ap_stopped",
                     "ap_was_running": True,
                     "remove_temporary_profile": False,
+                    "temporary_connection_uuid": None,
                 },
                 remove_temporary_profile=False,
             )
@@ -568,6 +567,7 @@ class ProvisioningWorkflow:
                     "phase": "ap_stopped",
                     "ap_was_running": True,
                     "remove_temporary_profile": False,
+                    "temporary_connection_uuid": None,
                 },
                 remove_temporary_profile=False,
             )
@@ -576,28 +576,8 @@ class ProvisioningWorkflow:
         except RecoveryError:
             _LOGGER.exception("Session timed out and AP recovery failed")
 
-    async def _wait_for_connection(
-        self, interface: str, expected_ssid: str, timeout_seconds: float = 35
-    ) -> dict[str, Any]:
-        deadline = asyncio.get_running_loop().time() + timeout_seconds
-        while asyncio.get_running_loop().time() < deadline:
-            info = await self._supervisor.get_interface_info(interface)
-            wifi = info.get("wifi")
-            if (
-                info.get("connected") is True
-                and isinstance(wifi, dict)
-                and wifi.get("ssid") == expected_ssid
-            ):
-                return info
-            await asyncio.sleep(1)
-        raise SupervisorError(
-            "The Wi-Fi interface did not join the Meross setup AP in time."
-        )
-
-    def _private_gateway(self, interface_info: Mapping[str, Any]) -> str:
-        ipv4 = interface_info.get("ipv4")
-        gateway = ipv4.get("gateway") if isinstance(ipv4, dict) else None
-        if not isinstance(gateway, str):
+    def _private_gateway(self, gateway: str) -> str:
+        if not isinstance(gateway, str) or not gateway:
             raise SafetyCheckError(
                 "The setup AP did not report an IPv4 gateway; refusing to "
                 "guess the device address."
@@ -637,25 +617,6 @@ class ProvisioningWorkflow:
                         )
                 except ValueError:
                     continue
-
-    @staticmethod
-    def _parse_access_points(raw: list[dict[str, Any]]) -> list[AccessPoint]:
-        access_points: list[AccessPoint] = []
-        for item in raw:
-            ssid = item.get("ssid")
-            mac = item.get("mac")
-            if not isinstance(ssid, str) or not ssid or not isinstance(mac, str):
-                continue
-            access_points.append(
-                AccessPoint(
-                    ssid=ssid,
-                    mac=mac,
-                    frequency=int(item.get("frequency", 0)),
-                    signal=int(item.get("signal", 0)),
-                    mode=str(item.get("mode", "infrastructure")),
-                )
-            )
-        return access_points
 
     @staticmethod
     def _validate_target_wifi(ssid: str, password: str) -> None:
@@ -699,22 +660,34 @@ class ProvisioningWorkflow:
         addon_slug = str(journal.get("access_point_addon_slug", ""))
         errors: list[str] = []
 
-        if remove_temporary_profile and interface:
+        temporary_connection_uuid = journal.get("temporary_connection_uuid")
+        if interface and journal.get("ap_was_running") is True:
             try:
-                # Supervisor v1 deletes the active profile when disabling an
-                # interface. The UI therefore requires explicit confirmation
-                # that this interface has no profile the user needs to keep.
-                await self._supervisor.update_interface(interface, {"enabled": False})
+                await self._network_manager.set_managed(interface, False)
             except Exception:
-                errors.append("could not remove the temporary Wi-Fi profile")
-                _LOGGER.exception("Could not clean up the temporary Wi-Fi profile")
+                errors.append(
+                    "could not release the Wi-Fi interface from NetworkManager"
+                )
+                _LOGGER.exception("Could not release the Wi-Fi interface")
+
+        if remove_temporary_profile:
+            if not isinstance(temporary_connection_uuid, str):
+                errors.append("the temporary Wi-Fi connection ID is missing")
+            else:
+                try:
+                    await self._network_manager.delete_connection(
+                        temporary_connection_uuid
+                    )
+                except Exception:
+                    errors.append("could not remove the temporary Wi-Fi connection")
+                    _LOGGER.exception("Could not remove the temporary Wi-Fi connection")
 
         if journal.get("ap_was_running") is True and addon_slug:
             try:
                 info = await self._supervisor.get_addon_info(addon_slug)
                 if info.get("state") != "started":
                     await self._supervisor.start_addon(addon_slug)
-                elif remove_temporary_profile:
+                else:
                     await self._supervisor.restart_addon(addon_slug)
             except Exception:
                 errors.append("could not restart the configured AP app")
@@ -729,6 +702,7 @@ class ProvisioningWorkflow:
                     "phase": "recovery_required",
                     "ap_was_running": journal.get("ap_was_running") is True,
                     "remove_temporary_profile": remove_temporary_profile,
+                    "temporary_connection_uuid": temporary_connection_uuid,
                     "created_at": journal.get(
                         "created_at", datetime.now(UTC).isoformat()
                     ),

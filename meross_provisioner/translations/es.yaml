@@ -4,7 +4,7 @@ configuration:
     description: >-
       Interfaz Wi-Fi del host que usa el add-on del punto de acceso. En una
       Raspberry Pi 5 suele ser wlan0. Debe coincidir con la interfaz configurada
-      en ese add-on y estar dedicada al AP.
+      en ese add-on, estar dedicada al AP y ser visible para NetworkManager.
   access_point_addon_slug:
     name: Slug del add-on de punto de acceso
     description: >-

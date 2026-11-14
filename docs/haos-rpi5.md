@@ -8,14 +8,14 @@ This is the initial target, not yet a verified installation guide. Do not use th
 - `wlan0`: dedicated to the configured Home Assistant access-point app, normally advertising `HA-AP`.
 - The Meross device: physically placed in setup mode and advertising its temporary setup AP.
 
-The app temporarily stops the configured AP app, scans using `wlan0`, connects `wlan0` to one selected Meross AP, configures the device to join the target SSID, removes the temporary profile if safe, and restarts the AP app. Wi-Fi clients may be offline during this transaction and should reconnect afterwards.
+The app temporarily stops the configured AP app, asks NetworkManager over host D-Bus to manage `wlan0`, scans and connects to one selected Meross AP, configures the device to join the target SSID, removes only its UUID-identified temporary profile, marks the interface unmanaged again, and restarts the AP app. Wi-Fi clients may be offline during this transaction and should reconnect afterwards.
 
 ## Before installation
 
 1. Confirm Home Assistant is reachable over Ethernet, not only through `HA-AP`.
 2. Back up the access-point app's configuration. Record its SSID, channel, DHCP range, and internet-routing setting.
 3. Confirm the exact AP app supports stopping and starting through Supervisor and reuses its saved configuration on start.
-4. Confirm the Wi-Fi interface is dedicated to that AP app. Do not proceed if it also stores a Wi-Fi connection profile that you need.
+4. Confirm the Wi-Fi interface is dedicated to that AP app. Provisioner refuses to proceed if NetworkManager reports saved Wi-Fi profiles that could autoconnect.
 5. Make `HA-AP` visible on 2.4 GHz and use a WPA/WPA2 passphrase of 8–63 bytes. The Meross device must see that SSID during its own Wi-Fi scan.
 6. Check that the wired LAN is not using the Meross setup subnet (commonly `10.10.10.0/24`). Overlapping subnets can route setup traffic incorrectly.
 7. Test with one non-critical Meross device, not the entire collection.
@@ -26,11 +26,11 @@ To test a local checkout, place the `meross_provisioner/` app directory under Ho
 
 Configure:
 
-- `wifi_interface`: normally `wlan0` on the Pi, but verify through **Settings → System → Network** / Supervisor network info.
+- `wifi_interface`: use the interface configured in Hass.io Access Point (normally `wlan0` on the Pi). Provisioner checks it with NetworkManager over host D-Bus, even though the AP app marks it unmanaged.
 - `access_point_addon_slug`: the actual Supervisor slug of the AP app, not just its display name.
 - `ingress_peer_ip`: normally `172.30.32.2`; change it only if the Supervisor's internal address differs.
 
-The app requests the Supervisor `manager` role because it must use the host network API and stop/start the AP app. Review the source and permissions before enabling it.
+The app requests the Supervisor `manager` role to stop/start the AP app and host D-Bus access for NetworkManager. Review the source and permissions before enabling it.
 
 ## First test sequence
 

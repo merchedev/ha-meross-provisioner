@@ -6,10 +6,10 @@ Compatibility is a property of the complete combination: device model/revision/f
 
 | Platform / hardware | Status | Requirements and limitations |
 | --- | --- | --- |
-| Raspberry Pi 5, Home Assistant OS, Ethernet + internal Wi-Fi | **Target; not hardware-verified** | Ethernet must remain connected. The Wi-Fi interface is temporarily released from the AP app and used as a station. The exact AP app must stop cleanly and restore the same SSID/DHCP settings. |
-| Other Home Assistant OS hardware | **Not tested** | Needs a Supervisor-visible wireless interface, a working station mode, and a supported AP app lifecycle. |
-| Home Assistant Supervised | **Planned / not tested** | Requires Supervisor API access and host NetworkManager behavior equivalent to the HAOS backend. |
-| Home Assistant Container / Core | **Not supported by the first adapter** | No Supervisor API. A separate, narrowly scoped Linux NetworkManager backend is required. |
+| Raspberry Pi 5, Home Assistant OS, Ethernet + internal Wi-Fi | **Target; not hardware-verified** | Ethernet must remain connected. The app uses host D-Bus/NetworkManager to temporarily claim `wlan0` after the AP app stops. The exact AP app must restore its SSID/DHCP settings when restarted. |
+| Other Home Assistant OS hardware | **Not tested** | Needs a NetworkManager-visible wireless device, host D-Bus access, a working station mode, and a supported AP app lifecycle. |
+| Home Assistant Supervised | **Planned / not tested** | Requires Supervisor API access, host D-Bus, and NetworkManager behavior equivalent to the HAOS backend. |
+| Home Assistant Container / Core | **Not supported by the first adapter** | No Supervisor app API or host D-Bus integration. A separate, narrowly scoped Linux backend is required. |
 | Simultaneous AP + station on one radio | **Not required** | The initial workflow stops the AP app first. If the AP must remain online, the adapter/driver must support concurrent mode and channel constraints; otherwise use another Wi-Fi adapter. |
 
 ## Host hardware checks
@@ -20,7 +20,7 @@ The platform adapter should check these conditions before changing anything:
 2. A wired management interface is connected, or the user has explicitly configured another independent management path.
 3. The AP app slug exists and is currently running.
 4. The AP app owns the selected Wi-Fi interface and can be stopped/restarted by the Supervisor.
-5. The Supervisor does not report a Wi-Fi profile on the selected interface, and the user confirms there is no unrelated saved profile that would be overwritten or deleted.
+5. NetworkManager reports no saved Wi-Fi profile that could autoconnect; Provisioner creates and removes only its own UUID-identified temporary profile.
 6. The target SSID is visible to the device and uses supported 2.4 GHz Wi-Fi security.
 7. The Meross setup network and the Ethernet LAN do not create an ambiguous route to the Meross setup gateway (commonly `10.10.10.1`).
 8. The Ingress proxy source address matches `ingress_peer_ip` in app options (default `172.30.32.2`).

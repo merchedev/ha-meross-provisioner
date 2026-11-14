@@ -19,6 +19,7 @@ from .errors import ProvisionerError, SessionError
 from .jobs import JobManager
 from .journal import TransactionJournal
 from .meross_setup import MerossSetupClient
+from .network_manager import NetworkManagerClient
 from .supervisor import SupervisorClient
 from .workflow import ProvisioningWorkflow
 
@@ -37,6 +38,9 @@ JOBS_KEY: web.AppKey[JobManager] = web.AppKey("jobs", JobManager)
 DEVICE_SESSION_KEY: web.AppKey[aiohttp.ClientSession | None] = web.AppKey(
     "device_session", aiohttp.ClientSession
 )
+NETWORK_MANAGER_KEY: web.AppKey[NetworkManagerClient | None] = web.AppKey(
+    "network_manager", NetworkManagerClient
+)
 RECOVERY_MESSAGE_KEY: web.AppKey[str | None] = web.AppKey("recovery_message", str)
 
 
@@ -47,6 +51,7 @@ def create_app(
     workflow: ProvisioningWorkflow | None = None,
     journal: TransactionJournal | None = None,
     ingress_peer_ip: str | None = None,
+    network_manager: NetworkManagerClient | None = None,
 ) -> web.Application:
     """Create the app; dependencies can be injected by hardware-free tests."""
     app_config = config or load_config()
@@ -66,6 +71,7 @@ def create_app(
     app[JOURNAL_KEY] = state_journal
     app[JOBS_KEY] = JobManager()
     app[DEVICE_SESSION_KEY] = None
+    app[NETWORK_MANAGER_KEY] = network_manager
     app[RECOVERY_MESSAGE_KEY] = None
 
     app.router.add_get("/", _index)
@@ -254,9 +260,12 @@ async def _recover_on_startup(app: web.Application) -> None:
         )
         app[DEVICE_SESSION_KEY] = device_session
         supervisor = app[SUPERVISOR_KEY]
+        network_manager = app[NETWORK_MANAGER_KEY] or NetworkManagerClient()
+        app[NETWORK_MANAGER_KEY] = network_manager
         config = app[CONFIG_KEY]
         workflow = ProvisioningWorkflow(
             supervisor=supervisor,
+            network_manager=network_manager,
             device_factory=lambda gateway: MerossSetupClient(device_session, gateway),
             journal=app[JOURNAL_KEY],
             config=config.workflow,

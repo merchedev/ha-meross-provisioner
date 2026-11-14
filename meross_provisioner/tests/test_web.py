@@ -25,7 +25,7 @@ class FakeWorkflow:
             ethernet_interface="eth0",
             access_point_addon_slug="local_test_ap",
             access_point_addon_state="started",
-            current_wifi_mode=None,
+            wifi_device_state="unmanaged",
             issues=(),
             warnings=(),
         )

@@ -6,6 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apk add --no-cache networkmanager-cli
+
 COPY requirements.txt ./requirements.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 

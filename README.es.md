@@ -13,7 +13,8 @@ El primer objetivo es una instalación de Home Assistant OS conectada por cable,
 - Las credenciales Wi‑Fi se envían por HTTP local al AP de configuración Meross. Base64 **no es cifrado**. Usa una contraseña exclusiva para la red IoT y configura los dispositivos estando presente.
 - La app no hace peticiones a la nube Meross ni envía `Appliance.Config.Key`. Eso no demuestra que el firmware del dispositivo nunca contacte con servidores del fabricante después de conectarse; hay que verificar cada firmware y aplicar reglas de salida en el router/AP si se necesita aislamiento total.
 - La app solo configura el Wi‑Fi; no controla los dispositivos. Tras configurarlos, usa HomeKit Device o una integración local compatible. Los modelos sin HomeKit podrían requerir una clave local adicional, todavía fuera del alcance del prototipo.
-- La app necesita el rol `manager` de la API del Supervisor para explorar/cambiar la red del host y detener/iniciar otra app. Es un permiso potente; revisa la documentación de seguridad.
+- La app necesita el rol `manager` del Supervisor para detener/iniciar el AP y acceso al D-Bus del host para controlar NetworkManager. Son permisos potentes; revisa la documentación de seguridad.
+- El preflight se detiene si NetworkManager tiene perfiles Wi-Fi guardados que puedan conectarse automáticamente.
 - El código actual es un prototipo. No lo uses en un sistema cuya interfaz Wi‑Fi tenga un perfil persistente que quieras conservar. El prototipo debe fallar de forma segura si no puede garantizar la recuperación.
 - Se espera que la Wi‑Fi integrada de la Pi 5 pueda usarse como cliente tras parar el AP, pero hay que probar la interacción entre Home Assistant OS, NetworkManager y el add-on concreto. No se presupone que AP y cliente funcionen a la vez.
 - Todavía no se ha probado con MSS210, MSS425FC ni MSL430. Consulta la matriz de compatibilidad.

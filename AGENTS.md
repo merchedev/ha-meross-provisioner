@@ -29,6 +29,7 @@ These instructions apply to the whole repository.
 - Any operation that pauses the user's access point must have a bounded timeout, a cancellation path, and a `finally`/recovery path that attempts to restore the original service.
 - Do not delete or overwrite an existing NetworkManager profile unless the operation has positively established that it is the temporary profile created by this app. If that cannot be established, fail safely and explain the limitation.
 - Keep Supervisor permissions to the minimum supported role. Any permission needed to manage another app or the host network must be justified in the documentation and surfaced to the user.
+- The current AP backend uses `host_dbus` only for NetworkManager control. Do not add `host_network`, Docker API access, or Linux capabilities unless a tested requirement is documented.
 
 ## Validation
 

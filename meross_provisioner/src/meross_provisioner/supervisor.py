@@ -87,31 +87,6 @@ class SupervisorClient:
     async def get_network_info(self) -> dict[str, Any]:
         return await self._request("GET", "/network/info")
 
-    async def get_interface_info(self, interface: str) -> dict[str, Any]:
-        name = quote(interface, safe="")
-        return await self._request("GET", f"/network/interface/{name}/info")
-
-    async def scan_access_points(self, interface: str) -> list[dict[str, Any]]:
-        name = quote(interface, safe="")
-        data = await self._request(
-            "GET",
-            f"/network/interface/{name}/accesspoints",
-            timeout_seconds=15,
-        )
-        access_points = data.get("accesspoints")
-        if not isinstance(access_points, list):
-            raise SupervisorError("The Supervisor returned no access-point list.")
-        return [item for item in access_points if isinstance(item, dict)]
-
-    async def update_interface(self, interface: str, body: Mapping[str, Any]) -> None:
-        name = quote(interface, safe="")
-        await self._request(
-            "POST",
-            f"/network/interface/{name}/update",
-            body=body,
-            timeout_seconds=75,
-        )
-
     async def get_addons(self) -> list[dict[str, Any]]:
         data = await self._request("GET", "/addons")
         addons = data.get("addons")

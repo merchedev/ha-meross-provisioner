@@ -13,6 +13,7 @@ _ALLOWED_FIELDS = {
     "phase",
     "ap_was_running",
     "remove_temporary_profile",
+    "temporary_connection_uuid",
     "created_at",
 }
 _REQUIRED_FIELDS = {
@@ -47,6 +48,11 @@ class TransactionJournal:
             or not isinstance(value.get("phase"), str)
             or not isinstance(value.get("ap_was_running"), bool)
             or not isinstance(value.get("remove_temporary_profile"), bool)
+            or (
+                "temporary_connection_uuid" in value
+                and value["temporary_connection_uuid"] is not None
+                and not isinstance(value["temporary_connection_uuid"], str)
+            )
         ):
             return None
         return value
@@ -61,6 +67,11 @@ class TransactionJournal:
             or not isinstance(value["phase"], str)
             or not isinstance(value["ap_was_running"], bool)
             or not isinstance(value["remove_temporary_profile"], bool)
+            or (
+                "temporary_connection_uuid" in value
+                and value["temporary_connection_uuid"] is not None
+                and not isinstance(value["temporary_connection_uuid"], str)
+            )
         ):
             raise ValueError("Transaction journal fields have invalid types.")
         self._path.parent.mkdir(parents=True, exist_ok=True)

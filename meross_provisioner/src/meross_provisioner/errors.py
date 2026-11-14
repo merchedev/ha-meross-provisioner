@@ -17,6 +17,10 @@ class SupervisorError(ProvisionerError):
     """The Home Assistant Supervisor API failed or returned invalid data."""
 
 
+class NetworkManagerError(ProvisionerError):
+    """The host NetworkManager could not safely manage the Wi-Fi interface."""
+
+
 class DeviceProtocolError(ProvisionerError):
     """The setup-mode device response was invalid or unexpected."""
 

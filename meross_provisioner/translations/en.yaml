@@ -4,7 +4,8 @@ configuration:
     description: >-
       Host Wi-Fi interface used by the access-point app. On a Raspberry Pi 5
       this is often wlan0. Use the same interface configured in that app; it
-      must be dedicated to the AP and available for temporary client mode.
+      must be dedicated to the AP and available to NetworkManager for temporary
+      client mode.
   access_point_addon_slug:
     name: Access-point app slug
     description: >-

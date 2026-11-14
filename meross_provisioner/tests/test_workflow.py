@@ -4,11 +4,12 @@ import pytest
 
 from meross_provisioner.errors import (
     ConfigurationError,
+    NetworkManagerError,
     SafetyCheckError,
     UnsupportedDeviceError,
 )
 from meross_provisioner.journal import TransactionJournal
-from meross_provisioner.models import DeviceInfo, DeviceWifiNetwork
+from meross_provisioner.models import AccessPoint, DeviceInfo, DeviceWifiNetwork
 from meross_provisioner.workflow import ProvisioningWorkflow, WorkflowConfig
 
 
@@ -22,6 +23,10 @@ class FakeSupervisor:
         self.started: list[str] = []
         self.restarted: list[str] = []
         self.profile_cleanup_count = 0
+        self.nm_state = "unmanaged"
+        self.device_present = True
+        self.saved_wifi_profiles = False
+        self.temp_connection_uuid: str | None = None
 
     async def get_network_info(self) -> dict:
         return {
@@ -45,52 +50,63 @@ class FakeSupervisor:
             ]
         }
 
-    async def get_interface_info(self, interface: str) -> dict:
+    async def get_device_info(self, interface: str) -> dict[str, str]:
         assert interface == "wlan0"
-        return {
-            "interface": "wlan0",
-            "type": "wireless",
-            "connected": self.wifi_connected,
-            "wifi": (
-                {"mode": "infrastructure", "ssid": self.wifi_ssid}
-                if self.wifi_ssid
-                else None
-            ),
-            "ipv4": {
-                "address": ["10.10.10.100/24"] if self.wifi_ssid else [],
-                "gateway": "10.10.10.1" if self.wifi_ssid else None,
-            },
-        }
+        if not self.device_present:
+            raise NetworkManagerError("NetworkManager does not list wlan0.")
+        return {"interface": interface, "type": "wifi", "state": self.nm_state}
 
-    async def scan_access_points(self, interface: str) -> list[dict]:
+    async def has_saved_wifi_profiles(self) -> bool:
+        return self.saved_wifi_profiles
+
+    async def set_managed(self, interface: str, managed: bool) -> None:
+        assert interface == "wlan0"
+        self.nm_state = "disconnected" if managed else "unmanaged"
+        if not managed:
+            self.wifi_connected = False
+            self.wifi_ssid = None
+
+    async def scan_access_points(self, interface: str) -> list[AccessPoint]:
         assert interface == "wlan0"
         assert self.addon_state == "stopped"
+        assert self.nm_state == "disconnected"
         return [
-            {
-                "ssid": "Meross_SETUP_1234",
-                "mac": "aa:bb:cc:dd:ee:ff",
-                "frequency": 2412,
-                "signal": 77,
-                "mode": "infrastructure",
-            },
-            {
-                "ssid": "ordinary-network",
-                "mac": "11:22:33:44:55:66",
-                "frequency": 2437,
-                "signal": 80,
-                "mode": "infrastructure",
-            },
+            AccessPoint(
+                ssid="Meross_SETUP_1234",
+                mac="aa:bb:cc:dd:ee:ff",
+                frequency=2412,
+                signal=77,
+            ),
+            AccessPoint(
+                ssid="ordinary-network",
+                mac="11:22:33:44:55:66",
+                frequency=2437,
+                signal=80,
+            ),
         ]
 
-    async def update_interface(self, interface: str, body: dict) -> None:
+    async def create_open_connection(
+        self, interface: str, ssid: str, bssid: str, connection_uuid: str
+    ) -> None:
         assert interface == "wlan0"
-        if "wifi" in body:
-            self.wifi_ssid = body["wifi"]["ssid"]
-            self.wifi_connected = True
-        elif body.get("enabled") is False:
+        assert bssid == "aa:bb:cc:dd:ee:ff"
+        self.wifi_ssid = ssid
+        self.temp_connection_uuid = connection_uuid
+
+    async def activate_connection(self, interface: str, connection_uuid: str) -> None:
+        assert interface == "wlan0"
+        assert connection_uuid == self.temp_connection_uuid
+        self.nm_state = "connected"
+        self.wifi_connected = True
+
+    async def get_gateway(self, interface: str) -> str:
+        assert interface == "wlan0"
+        return "10.10.10.1"
+
+    async def delete_connection(self, connection_uuid: str) -> None:
+        if connection_uuid == self.temp_connection_uuid:
             self.profile_cleanup_count += 1
-            self.wifi_ssid = None
-            self.wifi_connected = False
+            self.temp_connection_uuid = None
 
     async def get_addon_info(self, slug: str) -> dict:
         assert slug == "local_test_ap"
@@ -166,6 +182,7 @@ def make_workflow(tmp_path, *, supervisor=None, device=None, config=None):
     selected_device = device or FakeDevice(journal=journal)
     workflow = ProvisioningWorkflow(
         supervisor=selected_supervisor,
+        network_manager=selected_supervisor,
         device_factory=lambda _: selected_device,
         journal=journal,
         config=config
@@ -209,24 +226,15 @@ async def test_preflight_requires_wired_management_path(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_preflight_lists_wifi_interfaces_seen_by_supervisor(tmp_path) -> None:
+async def test_preflight_checks_wifi_interface_via_networkmanager(tmp_path) -> None:
     supervisor = FakeSupervisor()
-    original_get_network_info = supervisor.get_network_info
-
-    async def without_wifi() -> dict:
-        result = await original_get_network_info()
-        result["interfaces"] = [
-            item for item in result["interfaces"] if item["type"] != "wireless"
-        ]
-        return result
-
-    supervisor.get_network_info = without_wifi
+    supervisor.device_present = False
     workflow, _, _, _ = make_workflow(tmp_path, supervisor=supervisor)
 
     report = await workflow.preflight()
 
     assert not report.ready
-    assert any("Available Wi-Fi interfaces: none" in issue for issue in report.issues)
+    assert any("NetworkManager does not list" in issue for issue in report.issues)
 
 
 @pytest.mark.asyncio
@@ -245,23 +253,13 @@ async def test_scan_requires_both_explicit_confirmations(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_preflight_refuses_existing_wifi_profile(tmp_path) -> None:
     supervisor = FakeSupervisor()
-    original_get_network_info = supervisor.get_network_info
-
-    async def with_existing_profile() -> dict:
-        result = await original_get_network_info()
-        wireless = next(
-            item for item in result["interfaces"] if item["type"] == "wireless"
-        )
-        wireless["wifi"] = {"mode": "ap", "ssid": "HA-AP"}
-        return result
-
-    supervisor.get_network_info = with_existing_profile
+    supervisor.saved_wifi_profiles = True
     workflow, _, _, _ = make_workflow(tmp_path, supervisor=supervisor)
 
     report = await workflow.preflight()
 
     assert not report.ready
-    assert any("existing Wi-Fi profile" in issue for issue in report.issues)
+    assert any("saved Wi-Fi profiles" in issue for issue in report.issues)
     assert supervisor.stopped == []
 
 
@@ -294,6 +292,8 @@ async def test_startup_recovery_removes_journaled_temporary_profile(tmp_path) ->
     supervisor.addon_state = "stopped"
     supervisor.wifi_ssid = "Meross_SETUP_1234"
     supervisor.wifi_connected = True
+    supervisor.nm_state = "connected"
+    supervisor.temp_connection_uuid = "00000000-0000-0000-0000-000000000001"
     workflow, _, _, journal = make_workflow(tmp_path, supervisor=supervisor)
     journal.write(
         {
@@ -302,6 +302,7 @@ async def test_startup_recovery_removes_journaled_temporary_profile(tmp_path) ->
             "phase": "temporary_profile_created",
             "ap_was_running": True,
             "remove_temporary_profile": True,
+            "temporary_connection_uuid": supervisor.temp_connection_uuid,
         }
     )
 
@@ -320,6 +321,8 @@ async def test_recovery_restarts_ap_if_it_started_before_profile_cleanup(
     supervisor = FakeSupervisor()
     supervisor.wifi_ssid = "Meross_SETUP_1234"
     supervisor.wifi_connected = True
+    supervisor.nm_state = "connected"
+    supervisor.temp_connection_uuid = "00000000-0000-0000-0000-000000000002"
     workflow, _, _, journal = make_workflow(tmp_path, supervisor=supervisor)
     journal.write(
         {
@@ -328,6 +331,7 @@ async def test_recovery_restarts_ap_if_it_started_before_profile_cleanup(
             "phase": "temporary_profile_created",
             "ap_was_running": True,
             "remove_temporary_profile": True,
+            "temporary_connection_uuid": supervisor.temp_connection_uuid,
         }
     )
 
