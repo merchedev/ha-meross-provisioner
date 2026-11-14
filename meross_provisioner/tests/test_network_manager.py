@@ -169,7 +169,7 @@ async def test_managed_up_brings_wifi_link_back_after_hostapd() -> None:
     await client.set_managed("wlan0", False)
 
     assert calls[0] == ("radio", "wifi", "on")
-    assert calls[1] == ("device", "set", "wlan0", "managed", "up")
+    assert calls[1] == ("device", "set", "wlan0", "managed", "yes")
     assert calls[2] == ("device", "set", "wlan0", "managed", "no")
 
 

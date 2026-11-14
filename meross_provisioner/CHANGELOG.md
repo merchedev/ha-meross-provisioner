@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11
+
+- Restore compatibility with NetworkManager versions that do not support `managed up`.
+- Continue to the scan when the device briefly reports unavailable.
+- Include the underlying `nmcli` error text in safe diagnostics.
+
 ## 0.1.10
 
 - Enable the Wi-Fi radio and use NetworkManager `managed up` to recover `wlan0` after the AP app stops.

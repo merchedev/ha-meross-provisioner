@@ -50,10 +50,15 @@ class NetworkManagerClient:
             await _stop_process(process)
             raise
         if process.returncode != 0:
-            # nmcli errors can include network names. Keep the UI/log message generic.
+            detail_lines = [
+                line.strip()
+                for line in _stderr.decode("utf-8", errors="replace").splitlines()
+                if line.strip()
+            ]
+            detail = f": {detail_lines[-1][:200]}" if detail_lines else ""
             raise NetworkManagerError(
-                f"NetworkManager command {args[0]!r} failed "
-                f"(exit {process.returncode})."
+                f"NetworkManager command {' '.join(args[:3])!r} failed "
+                f"(exit {process.returncode}){detail}."
             )
         return stdout.decode("utf-8", errors="replace").strip()
 
@@ -165,17 +170,13 @@ class NetworkManagerClient:
         await self._run("radio", "wifi", "on")
 
     async def set_managed(self, interface: str, managed: bool) -> None:
-        """Allow or release an interface from NetworkManager control.
-
-        `managed up` also brings the administrative link up; a plain `yes`
-        can leave an interface released by hostapd in the unavailable state.
-        """
+        """Allow or release an interface from NetworkManager control."""
         await self._run(
             "device",
             "set",
             interface,
             "managed",
-            "up" if managed else "no",
+            "yes" if managed else "no",
         )
 
     async def scan_access_points(self, interface: str) -> list[AccessPoint]:

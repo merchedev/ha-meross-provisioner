@@ -653,9 +653,12 @@ class ProvisioningWorkflow:
             if last_state.casefold() in {"disconnected", "connected"}:
                 return
             await asyncio.sleep(0.5)
-        raise NetworkManagerError(
-            "NetworkManager did not make the Wi-Fi device available for scanning "
-            f"(last state: {last_state!r})."
+        # Some NetworkManager/driver combinations report `unavailable` until
+        # a scan is requested. Let the scan attempt reactivate the link.
+        _LOGGER.warning(
+            "Wi-Fi interface %s still reports %s before scanning",
+            interface,
+            last_state,
         )
 
     def _private_gateway(self, gateway: str) -> str:
