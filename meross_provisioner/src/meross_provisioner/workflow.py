@@ -67,6 +67,8 @@ class NetworkManagerPort(Protocol):
         self, connection_uuids: list[str], enabled: bool
     ) -> None: ...
 
+    async def enable_wifi_radio(self) -> None: ...
+
     async def set_managed(self, interface: str, managed: bool) -> None: ...
 
     async def scan_access_points(self, interface: str) -> list[AccessPoint]: ...
@@ -347,6 +349,7 @@ class ProvisioningWorkflow:
                     )
                 journal["phase"] = "wifi_autoconnect_suspended"
                 self._journal.write(journal)
+                await self._network_manager.enable_wifi_radio()
                 await self._network_manager.set_managed(
                     self._config.wifi_interface, True
                 )
@@ -643,18 +646,16 @@ class ProvisioningWorkflow:
     ) -> None:
         """Wait until NetworkManager has brought the interface up for scanning."""
         deadline = asyncio.get_running_loop().time() + timeout_seconds
+        last_state = "unknown"
         while asyncio.get_running_loop().time() < deadline:
             info = await self._network_manager.get_device_info(interface)
-            state = info.get("state", "").casefold()
-            if state in {"disconnected", "connected"}:
+            last_state = info.get("state", "unknown")
+            if last_state.casefold() in {"disconnected", "connected"}:
                 return
-            if state == "unavailable":
-                raise NetworkManagerError(
-                    "NetworkManager reports the Wi-Fi device as unavailable."
-                )
             await asyncio.sleep(0.5)
         raise NetworkManagerError(
-            "NetworkManager did not make the Wi-Fi device available for scanning."
+            "NetworkManager did not make the Wi-Fi device available for scanning "
+            f"(last state: {last_state!r})."
         )
 
     def _private_gateway(self, gateway: str) -> str:

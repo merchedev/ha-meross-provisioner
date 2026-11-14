@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.10
+
+- Enable the Wi-Fi radio and use NetworkManager `managed up` to recover `wlan0` after the AP app stops.
+- Treat the transient unavailable state as recoverable and report the final state on timeout.
+
 ## 0.1.9
 
 - Wait for NetworkManager to bring the Wi-Fi device up after stopping the AP.

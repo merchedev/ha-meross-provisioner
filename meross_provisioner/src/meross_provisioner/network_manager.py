@@ -160,14 +160,22 @@ class NetworkManagerClient:
                 value,
             )
 
+    async def enable_wifi_radio(self) -> None:
+        """Ensure NetworkManager's Wi-Fi radio switch is enabled."""
+        await self._run("radio", "wifi", "on")
+
     async def set_managed(self, interface: str, managed: bool) -> None:
-        """Allow or release an interface from NetworkManager control."""
+        """Allow or release an interface from NetworkManager control.
+
+        `managed up` also brings the administrative link up; a plain `yes`
+        can leave an interface released by hostapd in the unavailable state.
+        """
         await self._run(
             "device",
             "set",
             interface,
             "managed",
-            "yes" if managed else "no",
+            "up" if managed else "no",
         )
 
     async def scan_access_points(self, interface: str) -> list[AccessPoint]:

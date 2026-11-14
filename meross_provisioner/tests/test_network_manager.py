@@ -155,6 +155,25 @@ async def test_open_connection_rejects_invalid_bssid_before_running_nmcli() -> N
 
 
 @pytest.mark.asyncio
+async def test_managed_up_brings_wifi_link_back_after_hostapd() -> None:
+    client = NetworkManagerClient()
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_run(*args: str, **kwargs: object) -> str:
+        calls.append(args)
+        return ""
+
+    client._run = fake_run
+    await client.enable_wifi_radio()
+    await client.set_managed("wlan0", True)
+    await client.set_managed("wlan0", False)
+
+    assert calls[0] == ("radio", "wifi", "on")
+    assert calls[1] == ("device", "set", "wlan0", "managed", "up")
+    assert calls[2] == ("device", "set", "wlan0", "managed", "no")
+
+
+@pytest.mark.asyncio
 async def test_autoconnect_changes_are_scoped_to_known_uuids() -> None:
     client = NetworkManagerClient()
     calls: list[tuple[str, ...]] = []

@@ -30,6 +30,7 @@ class FakeSupervisor:
         self.restarted: list[str] = []
         self.profile_cleanup_count = 0
         self.nm_state = "unmanaged"
+        self.radio_enabled = False
         self.device_present = True
         self.wifi_profiles = [
             WifiProfile(
@@ -104,6 +105,9 @@ class FakeSupervisor:
         for connection_uuid in connection_uuids:
             assert connection_uuid in self.autoconnect_snapshots
             self.autoconnect_snapshots[connection_uuid] = enabled
+
+    async def enable_wifi_radio(self) -> None:
+        self.radio_enabled = True
 
     async def set_managed(self, interface: str, managed: bool) -> None:
         assert interface == "wlan0"
@@ -309,6 +313,7 @@ async def test_scan_pauses_ap_and_returns_only_meross_candidates(tmp_path) -> No
     assert [item.ssid for item in access_points] == ["Meross_SETUP_1234"]
     assert supervisor.stopped == ["local_test_ap"]
     assert supervisor.addon_state == "stopped"
+    assert supervisor.radio_enabled is True
     assert not any(supervisor.autoconnect_snapshots.values())
     saved = journal.read()
     assert saved is not None
