@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8
+
+- Automatically suspend autoconnect for saved Wi-Fi profiles that could claim the AP interface.
+- Restore their autoconnect state after provisioning, cancellation, timeout, or crash recovery.
+- Remove the need to edit NetworkManager profiles manually.
+
 ## 0.1.7
 
 - Only block saved Wi-Fi profiles that could autoconnect to the selected AP interface.

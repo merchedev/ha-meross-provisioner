@@ -9,7 +9,12 @@ from meross_provisioner.errors import (
     UnsupportedDeviceError,
 )
 from meross_provisioner.journal import TransactionJournal
-from meross_provisioner.models import AccessPoint, DeviceInfo, DeviceWifiNetwork
+from meross_provisioner.models import (
+    AccessPoint,
+    DeviceInfo,
+    DeviceWifiNetwork,
+    WifiProfile,
+)
 from meross_provisioner.workflow import ProvisioningWorkflow, WorkflowConfig
 
 
@@ -25,7 +30,19 @@ class FakeSupervisor:
         self.profile_cleanup_count = 0
         self.nm_state = "unmanaged"
         self.device_present = True
-        self.blocking_wifi_profiles: list[str] = []
+        self.wifi_profiles = [
+            WifiProfile(
+                name="Supervisor wlan0",
+                connection_uuid="11111111-1111-4111-8111-111111111111",
+            ),
+            WifiProfile(
+                name="Supervisor wlan0",
+                connection_uuid="22222222-2222-4222-8222-222222222222",
+            ),
+        ]
+        self.autoconnect_snapshots: dict[str, bool] = {
+            profile.connection_uuid: True for profile in self.wifi_profiles
+        }
         self.temp_connection_uuid: str | None = None
 
     async def get_network_info(self) -> dict:
@@ -56,9 +73,22 @@ class FakeSupervisor:
             raise NetworkManagerError("NetworkManager does not list wlan0.")
         return {"interface": interface, "type": "wifi", "state": self.nm_state}
 
-    async def find_autoconnecting_wifi_profiles(self, interface: str) -> list[str]:
+    async def find_autoconnecting_wifi_profiles(
+        self, interface: str
+    ) -> list[WifiProfile]:
         assert interface == "wlan0"
-        return self.blocking_wifi_profiles
+        return [
+            profile
+            for profile in self.wifi_profiles
+            if self.autoconnect_snapshots[profile.connection_uuid]
+        ]
+
+    async def set_profiles_autoconnect(
+        self, connection_uuids: list[str], enabled: bool
+    ) -> None:
+        for connection_uuid in connection_uuids:
+            assert connection_uuid in self.autoconnect_snapshots
+            self.autoconnect_snapshots[connection_uuid] = enabled
 
     async def set_managed(self, interface: str, managed: bool) -> None:
         assert interface == "wlan0"
@@ -252,15 +282,15 @@ async def test_scan_requires_both_explicit_confirmations(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_preflight_refuses_existing_wifi_profile(tmp_path) -> None:
+async def test_preflight_warns_about_autoconnecting_profiles(tmp_path) -> None:
     supervisor = FakeSupervisor()
-    supervisor.blocking_wifi_profiles = ["legacy-home-wifi"]
     workflow, _, _, _ = make_workflow(tmp_path, supervisor=supervisor)
 
     report = await workflow.preflight()
 
-    assert not report.ready
-    assert any("legacy-home-wifi" in issue for issue in report.issues)
+    assert report.ready
+    assert any("Supervisor wlan0" in warning for warning in report.warnings)
+    assert not any("Supervisor wlan0" in issue for issue in report.issues)
     assert supervisor.stopped == []
 
 
@@ -277,6 +307,7 @@ async def test_scan_pauses_ap_and_returns_only_meross_candidates(tmp_path) -> No
     assert [item.ssid for item in access_points] == ["Meross_SETUP_1234"]
     assert supervisor.stopped == ["local_test_ap"]
     assert supervisor.addon_state == "stopped"
+    assert not any(supervisor.autoconnect_snapshots.values())
     saved = journal.read()
     assert saved is not None
     assert "password" not in saved
@@ -284,6 +315,7 @@ async def test_scan_pauses_ap_and_returns_only_meross_candidates(tmp_path) -> No
     await workflow.cancel(session_id)
     assert supervisor.addon_state == "started"
     assert supervisor.started == ["local_test_ap"]
+    assert all(supervisor.autoconnect_snapshots.values())
     assert journal.read() is None
 
 
@@ -295,6 +327,8 @@ async def test_startup_recovery_removes_journaled_temporary_profile(tmp_path) ->
     supervisor.wifi_connected = True
     supervisor.nm_state = "connected"
     supervisor.temp_connection_uuid = "00000000-0000-0000-0000-000000000001"
+    suspended_uuid = supervisor.wifi_profiles[0].connection_uuid
+    supervisor.autoconnect_snapshots[suspended_uuid] = False
     workflow, _, _, journal = make_workflow(tmp_path, supervisor=supervisor)
     journal.write(
         {
@@ -304,6 +338,7 @@ async def test_startup_recovery_removes_journaled_temporary_profile(tmp_path) ->
             "ap_was_running": True,
             "remove_temporary_profile": True,
             "temporary_connection_uuid": supervisor.temp_connection_uuid,
+            "suspended_profile_uuids": suspended_uuid,
         }
     )
 
@@ -311,6 +346,7 @@ async def test_startup_recovery_removes_journaled_temporary_profile(tmp_path) ->
 
     assert recovery_message is not None
     assert supervisor.profile_cleanup_count == 1
+    assert supervisor.autoconnect_snapshots[suspended_uuid] is True
     assert supervisor.addon_state == "started"
     assert journal.read() is None
 
@@ -363,6 +399,7 @@ async def test_provision_writes_wifi_and_restores_ap(tmp_path) -> None:
     assert not device.password_was_journaled
     assert supervisor.profile_cleanup_count == 1
     assert supervisor.addon_state == "started"
+    assert all(supervisor.autoconnect_snapshots.values())
     assert journal.read() is None
 
 
@@ -383,6 +420,7 @@ async def test_device_write_failure_still_restores_ap(tmp_path) -> None:
 
     assert supervisor.profile_cleanup_count == 1
     assert supervisor.addon_state == "started"
+    assert all(supervisor.autoconnect_snapshots.values())
     assert journal.read() is None
 
 

@@ -17,7 +17,8 @@ Please do not publish credentials, packet captures, or a working exploit in an i
 - The access point app is stopped only after an explicit confirmation in the Home Assistant UI.
 - A transaction has timeouts, cancellation, and best-effort recovery. It must not silently leave the AP app stopped.
 - The Supervisor `manager` role is required by the current platform adapter. The app must disclose this and must not request Docker API or unrestricted host access.
-- The app uses host D-Bus to ask NetworkManager to manage the dedicated Wi-Fi interface temporarily; it does not request `host_network` or `NET_ADMIN`.
+- The app uses host D-Bus to ask NetworkManager to manage the dedicated Wi-Fi interface temporarily and to suspend/restore `connection.autoconnect` on profiles that could claim the radio. It does not request `host_network` or `NET_ADMIN`.
+- Suspended profile UUIDs are journaled for recovery; profile contents and credentials are never copied. Existing profiles are never deleted.
 - The web server accepts traffic only from the Supervisor Ingress proxy at `172.30.32.2`; do not expose or map the app's internal port.
 
 ## Known risks

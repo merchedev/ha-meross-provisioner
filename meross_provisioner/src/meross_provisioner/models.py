@@ -24,6 +24,14 @@ class AccessPoint:
 
 
 @dataclass(frozen=True, slots=True)
+class WifiProfile:
+    """A saved NetworkManager Wi-Fi profile that could claim the AP radio."""
+
+    name: str
+    connection_uuid: str
+
+
+@dataclass(frozen=True, slots=True)
 class DeviceInfo:
     """Non-secret identity and firmware information from a Meross device."""
 
@@ -59,6 +67,7 @@ class ScanSession:
     access_point_addon_slug: str
     access_points: tuple[AccessPoint, ...]
     created_at: datetime
+    suspended_profile_uuids: tuple[str, ...] = ()
 
     def access_point(self, ssid: str, mac: str) -> AccessPoint | None:
         """Find the exact AP selected by the UI, avoiding SSID-only ambiguity."""

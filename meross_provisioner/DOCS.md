@@ -5,8 +5,8 @@
 ## 1. Antes de iniciar
 
 - Mantén Home Assistant conectado por Ethernet. El proceso interrumpe brevemente `HA-AP` y sus clientes Wi-Fi.
-- Usa una sola interfaz Wi-Fi dedicada al add-on de punto de acceso. No continúes si NetworkManager detecta perfiles Wi-Fi guardados que puedan autoconectarse.
-- Hass.io Access Point marca `wlan0` como no administrada mientras hostapd la usa. Provisioner utiliza NetworkManager por el D-Bus del host para gestionarla temporalmente; comprueba que NetworkManager vea la interfaz y que no haya perfiles Wi-Fi guardados que puedan autoconectarse.
+- Usa una sola interfaz Wi-Fi dedicada al add-on de punto de acceso. Si NetworkManager detecta perfiles que puedan autoconectarse a esa interfaz, Provisioner suspende temporalmente su autoconnexión y la restaura al terminar.
+- Hass.io Access Point marca `wlan0` como no administrada mientras hostapd la usa. Provisioner utiliza NetworkManager por el D-Bus del host para gestionarla temporalmente; comprueba que NetworkManager vea la interfaz.
 - El SSID de destino debe ser visible en 2,4 GHz y usar WPA/WPA2 con una contraseña de 8–63 bytes.
 - Configura primero un único dispositivo Meross en modo de emparejamiento y tenlo físicamente cerca.
 

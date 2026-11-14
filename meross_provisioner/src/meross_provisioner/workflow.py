@@ -31,6 +31,7 @@ from .models import (
     DeviceWifiNetwork,
     ProvisioningResult,
     ScanSession,
+    WifiProfile,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,7 +59,13 @@ class NetworkManagerPort(Protocol):
 
     async def get_device_info(self, interface: str) -> dict[str, str]: ...
 
-    async def find_autoconnecting_wifi_profiles(self, interface: str) -> list[str]: ...
+    async def find_autoconnecting_wifi_profiles(
+        self, interface: str
+    ) -> list[WifiProfile]: ...
+
+    async def set_profiles_autoconnect(
+        self, connection_uuids: list[str], enabled: bool
+    ) -> None: ...
 
     async def set_managed(self, interface: str, managed: bool) -> None: ...
 
@@ -158,8 +165,8 @@ class ProvisioningWorkflow:
         warnings: list[str] = [
             "The configured Wi-Fi AP will be interrupted during scanning/provisioning.",
             (
-                "Confirm this Wi-Fi interface is dedicated to the AP app and has "
-                "no saved station profile to preserve."
+                "Confirm this Wi-Fi interface is dedicated to the AP app. Profiles "
+                "that could interfere have autoconnect suspended and restored."
             ),
             (
                 "The device setup protocol sends Wi-Fi credentials over "
@@ -238,13 +245,16 @@ class ProvisioningWorkflow:
                 f"{wifi_device_state!r}; expected unmanaged or disconnected."
             )
         if blocking_wifi_profiles:
-            names = ", ".join(blocking_wifi_profiles[:5])
-            if len(blocking_wifi_profiles) > 5:
-                names += f", and {len(blocking_wifi_profiles) - 5} more"
-            issues.append(
-                "NetworkManager has saved Wi-Fi profiles that may autoconnect to "
-                f"{self._config.wifi_interface!r}: {names}. Disable their autoconnect "
-                "or remove them before using this dedicated AP interface."
+            unique_names = list(
+                dict.fromkeys(profile.name for profile in blocking_wifi_profiles)
+            )
+            names = ", ".join(unique_names[:5])
+            if len(unique_names) > 5:
+                names += f", and {len(unique_names) - 5} more"
+            warnings.append(
+                "These saved Wi-Fi profiles could autoconnect to "
+                f"{self._config.wifi_interface!r} and will be temporarily disabled, "
+                f"then restored: {names}."
             )
 
         state = addon.get("state")
@@ -320,6 +330,23 @@ class ProvisioningWorkflow:
                 await self._supervisor.stop_addon(ap_slug)
                 journal["phase"] = "ap_stopped"
                 self._journal.write(journal)
+                blocking_profiles = (
+                    await self._network_manager.find_autoconnecting_wifi_profiles(
+                        self._config.wifi_interface
+                    )
+                )
+                suspended_uuids = [
+                    profile.connection_uuid for profile in blocking_profiles
+                ]
+                journal["suspended_profile_uuids"] = ",".join(suspended_uuids)
+                journal["phase"] = "suspending_wifi_autoconnect"
+                self._journal.write(journal)
+                if suspended_uuids:
+                    await self._network_manager.set_profiles_autoconnect(
+                        suspended_uuids, False
+                    )
+                journal["phase"] = "wifi_autoconnect_suspended"
+                self._journal.write(journal)
                 await self._network_manager.set_managed(
                     self._config.wifi_interface, True
                 )
@@ -350,6 +377,7 @@ class ProvisioningWorkflow:
                     access_point_addon_slug=ap_slug,
                     access_points=tuple(candidates),
                     created_at=datetime.now(UTC),
+                    suspended_profile_uuids=tuple(suspended_uuids),
                 )
                 self._session = session
                 self._expiry_task = asyncio.create_task(
@@ -403,6 +431,9 @@ class ProvisioningWorkflow:
                     "ap_was_running": True,
                     "remove_temporary_profile": True,
                     "temporary_connection_uuid": connection_uuid,
+                    "suspended_profile_uuids": ",".join(
+                        session.suspended_profile_uuids
+                    ),
                     "created_at": session.created_at.isoformat(),
                 }
             )
@@ -423,6 +454,9 @@ class ProvisioningWorkflow:
                     "ap_was_running": True,
                     "remove_temporary_profile": True,
                     "temporary_connection_uuid": connection_uuid,
+                    "suspended_profile_uuids": ",".join(
+                        session.suspended_profile_uuids
+                    ),
                     "created_at": session.created_at.isoformat(),
                 }
             )
@@ -470,6 +504,9 @@ class ProvisioningWorkflow:
                         "remove_temporary_profile": profile_created,
                         "temporary_connection_uuid": (
                             connection_uuid if profile_created else None
+                        ),
+                        "suspended_profile_uuids": ",".join(
+                            session.suspended_profile_uuids
                         ),
                     },
                     remove_temporary_profile=profile_created,
@@ -520,6 +557,7 @@ class ProvisioningWorkflow:
                 "ap_was_running": True,
                 "remove_temporary_profile": False,
                 "temporary_connection_uuid": None,
+                "suspended_profile_uuids": ",".join(session.suspended_profile_uuids),
             },
             remove_temporary_profile=False,
         )
@@ -550,6 +588,9 @@ class ProvisioningWorkflow:
                     "ap_was_running": True,
                     "remove_temporary_profile": False,
                     "temporary_connection_uuid": None,
+                    "suspended_profile_uuids": ",".join(
+                        session.suspended_profile_uuids
+                    ),
                 },
                 remove_temporary_profile=False,
             )
@@ -574,6 +615,9 @@ class ProvisioningWorkflow:
                     "ap_was_running": True,
                     "remove_temporary_profile": False,
                     "temporary_connection_uuid": None,
+                    "suspended_profile_uuids": ",".join(
+                        session.suspended_profile_uuids
+                    ),
                 },
                 remove_temporary_profile=False,
             )
@@ -665,11 +709,19 @@ class ProvisioningWorkflow:
         interface = str(journal.get("interface", ""))
         addon_slug = str(journal.get("access_point_addon_slug", ""))
         errors: list[str] = []
+        suspended_value = journal.get("suspended_profile_uuids", "")
+        suspended_uuids = (
+            [value for value in suspended_value.split(",") if value]
+            if isinstance(suspended_value, str)
+            else []
+        )
 
         temporary_connection_uuid = journal.get("temporary_connection_uuid")
+        released = False
         if interface and journal.get("ap_was_running") is True:
             try:
                 await self._network_manager.set_managed(interface, False)
+                released = True
             except Exception:
                 errors.append(
                     "could not release the Wi-Fi interface from NetworkManager"
@@ -687,6 +739,15 @@ class ProvisioningWorkflow:
                 except Exception:
                     errors.append("could not remove the temporary Wi-Fi connection")
                     _LOGGER.exception("Could not remove the temporary Wi-Fi connection")
+
+        if released and suspended_uuids:
+            try:
+                await self._network_manager.set_profiles_autoconnect(
+                    suspended_uuids, True
+                )
+            except Exception:
+                errors.append("could not restore Wi-Fi profile autoconnect")
+                _LOGGER.exception("Could not restore Wi-Fi profile autoconnect")
 
         if journal.get("ap_was_running") is True and addon_slug:
             try:
@@ -709,6 +770,7 @@ class ProvisioningWorkflow:
                     "ap_was_running": journal.get("ap_was_running") is True,
                     "remove_temporary_profile": remove_temporary_profile,
                     "temporary_connection_uuid": temporary_connection_uuid,
+                    "suspended_profile_uuids": ",".join(suspended_uuids),
                     "created_at": journal.get(
                         "created_at", datetime.now(UTC).isoformat()
                     ),

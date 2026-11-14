@@ -20,7 +20,7 @@ The platform adapter should check these conditions before changing anything:
 2. A wired management interface is connected, or the user has explicitly configured another independent management path.
 3. The AP app slug exists and is currently running.
 4. The AP app owns the selected Wi-Fi interface and can be stopped/restarted by the Supervisor.
-5. NetworkManager reports no saved Wi-Fi profile that could autoconnect; Provisioner creates and removes only its own UUID-identified temporary profile.
+5. Provisioner can identify profiles that could autoconnect to the AP interface. It temporarily disables their autoconnect, restores it afterwards, creates its own UUID-identified temporary profile, and never deletes other profiles.
 6. The target SSID is visible to the device and uses supported 2.4 GHz Wi-Fi security.
 7. The Meross setup network and the Ethernet LAN do not create an ambiguous route to the Meross setup gateway (commonly `10.10.10.1`).
 8. The Ingress proxy source address matches `ingress_peer_ip` in app options (default `172.30.32.2`).

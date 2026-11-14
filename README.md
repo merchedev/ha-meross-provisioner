@@ -14,8 +14,8 @@ The initial target is a wired Home Assistant OS installation with a dedicated Wi
 - The app itself makes no Meross cloud requests and does not send `Appliance.Config.Key`. That does not prove the device firmware will never contact vendor servers after joining Wi-Fi; verify the exact firmware and apply router/AP egress rules if cloud isolation is required.
 - The app needs the Supervisor `manager` role to stop/start the AP app and host D-Bus access for NetworkManager control. These are powerful permissions; review the security notes before installing.
 - The ingress peer defaults to `172.30.32.2`. Change `ingress_peer_ip` in app options only if your Home Assistant Supervisor uses a different internal address.
-- The current code is a prototype. Do not use it on a system whose Wi-Fi interface has a persistent network profile you need to keep. The initial implementation deliberately fails closed when it cannot establish safe cleanup conditions.
-- The selected interface must be dedicated to the AP app. Preflight refuses to continue if NetworkManager has saved Wi-Fi profiles that could autoconnect.
+- The current code is a prototype. Do not use it where the AP app cannot safely release and restore the Wi-Fi interface. Provisioner journals recovery metadata and restores any autoconnect setting it temporarily changes.
+- The selected interface must be dedicated to the AP app. Profiles that could autoconnect to it have their autoconnect temporarily disabled and restored when provisioning ends.
 - The Pi 5's built-in radio is expected to be usable as a station after the AP app stops, but the interaction between Home Assistant OS, NetworkManager, and a particular AP app must be tested. No AP+station concurrency is assumed.
 - The project has not yet been tested with MSS210, MSS425FC, or MSL430 hardware. See the compatibility matrix.
 

@@ -30,19 +30,19 @@ The web service accepts requests only from the Supervisor's internal Ingress pro
 
 ## Provisioning lifecycle
 
-1. **Preflight:** verify Supervisor access, that NetworkManager sees the configured wireless device, that no saved Wi-Fi profile could autoconnect, the selected AP app, and a connected wired interface that keeps Home Assistant reachable.
+1. **Preflight:** verify Supervisor access, that NetworkManager sees the configured wireless device, the selected AP app, and a connected wired interface that keeps Home Assistant reachable. Profiles that could autoconnect are reported as warnings, not blockers.
 2. **Confirm and pause:** the user confirms the outage; save a non-secret recovery journal, then stop the AP app.
-3. **Discover:** temporarily mark the Wi-Fi device managed by NetworkManager, scan nearby networks with `nmcli`, and show the result in the UI. A short-lived session keeps the AP app stopped while the user selects one Meross setup network.
+3. **Discover:** temporarily suspend autoconnect on profiles that could claim the radio, mark the Wi-Fi device managed by NetworkManager, scan nearby networks with `nmcli`, and show the result in the UI. A short-lived session keeps the AP app stopped while the user selects one Meross setup network.
 4. **Connect:** create a non-autoconnecting open Wi-Fi profile pinned to the selected AP's BSSID and identified by a generated UUID. Keep the wired interface as the preferred route.
 5. **Inspect:** query device identity and the network list. Do not write Wi-Fi settings if the target network is not found or the device is unsupported.
 6. **Configure:** send only the target Wi-Fi configuration. Do not send Meross cloud/MQTT account keys.
-7. **Restore:** mark the Wi-Fi device unmanaged, remove only the temporary profile with the journaled UUID, then restart the AP app. Report both the device result and any recovery warning.
+7. **Restore:** mark the Wi-Fi device unmanaged, remove only the temporary profile with the journaled UUID, restore autoconnect on the suspended profiles, then restart the AP app. Report both the device result and any recovery warning.
 
 The transaction must always have a timeout, a cancel operation, and a startup recovery path. The journal must never contain passwords, device keys, or raw request bodies.
 
 ## Network profile safety
 
-The AP app marks its device unmanaged while hostapd controls it. Provisioner temporarily asks NetworkManager to manage the device, but refuses preflight when saved Wi-Fi profiles could autoconnect. It creates a new profile with a generated UUID and deletes only that profile during cleanup; existing profiles are never overwritten or deleted.
+The AP app marks its device unmanaged while hostapd controls it. Provisioner temporarily asks NetworkManager to manage the device and suspends autoconnect on saved profiles that could claim the radio. It creates a new profile with a generated UUID, deletes only that profile during cleanup, and restores autoconnect on the suspended profiles. Existing profiles are never deleted and their other settings are not changed.
 
 The exact interaction with the AP app must be verified for each supported app and release. It must stop cleanly, release hostapd's control, and restore its saved SSID/DHCP settings when restarted. Unknown AP apps are not automatically supported merely because their slug can be configured.
 

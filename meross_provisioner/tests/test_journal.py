@@ -13,6 +13,9 @@ def test_journal_round_trips_recovery_metadata_without_secrets(tmp_path) -> None
         "phase": "temporary_profile_created",
         "ap_was_running": True,
         "remove_temporary_profile": True,
+        "suspended_profile_uuids": (
+            "11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222"
+        ),
     }
 
     journal.write(state)

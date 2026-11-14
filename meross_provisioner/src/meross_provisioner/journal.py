@@ -14,6 +14,7 @@ _ALLOWED_FIELDS = {
     "ap_was_running",
     "remove_temporary_profile",
     "temporary_connection_uuid",
+    "suspended_profile_uuids",
     "created_at",
 }
 _REQUIRED_FIELDS = {
@@ -53,6 +54,10 @@ class TransactionJournal:
                 and value["temporary_connection_uuid"] is not None
                 and not isinstance(value["temporary_connection_uuid"], str)
             )
+            or (
+                "suspended_profile_uuids" in value
+                and not isinstance(value["suspended_profile_uuids"], str)
+            )
         ):
             return None
         return value
@@ -71,6 +76,10 @@ class TransactionJournal:
                 "temporary_connection_uuid" in value
                 and value["temporary_connection_uuid"] is not None
                 and not isinstance(value["temporary_connection_uuid"], str)
+            )
+            or (
+                "suspended_profile_uuids" in value
+                and not isinstance(value["suspended_profile_uuids"], str)
             )
         ):
             raise ValueError("Transaction journal fields have invalid types.")

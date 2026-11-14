@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from meross_provisioner.errors import NetworkManagerError
+from meross_provisioner.models import WifiProfile
 from meross_provisioner.network_manager import (
     NetworkManagerClient,
     _split_nmcli_fields,
@@ -46,7 +47,12 @@ async def test_scan_maps_nmcli_output_to_access_points() -> None:
                     "connection.autoconnect": "yes",
                 }
             },
-            ["home-wifi"],
+            [
+                WifiProfile(
+                    name="home-wifi",
+                    connection_uuid="11111111-1111-4111-8111-111111111111",
+                )
+            ],
         ),
         (
             "other-wifi:22222222-2222-4222-8222-222222222222:802-11-wireless",
@@ -76,14 +82,19 @@ async def test_scan_maps_nmcli_output_to_access_points() -> None:
                     "connection.autoconnect": "yes",
                 }
             },
-            ["unbound-wifi"],
+            [
+                WifiProfile(
+                    name="unbound-wifi",
+                    connection_uuid="44444444-4444-4444-8444-444444444444",
+                )
+            ],
         ),
     ],
 )
 async def test_only_autoconnecting_profiles_for_the_target_interface_block(
     profiles: str,
     profile_data: dict[str, dict[str, str]],
-    expected: list[str],
+    expected: list[WifiProfile],
 ) -> None:
     client = NetworkManagerClient()
 
@@ -141,3 +152,31 @@ async def test_open_connection_rejects_invalid_bssid_before_running_nmcli() -> N
             "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
         )
     assert not called
+
+
+@pytest.mark.asyncio
+async def test_autoconnect_changes_are_scoped_to_known_uuids() -> None:
+    client = NetworkManagerClient()
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_run(*args: str, **kwargs: object) -> str:
+        calls.append(args)
+        return ""
+
+    client._run = fake_run
+    first = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    second = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+
+    await client.set_profiles_autoconnect([first, second], False)
+    await client.set_profiles_autoconnect([first], True)
+
+    assert calls[0][-1] == "no"
+    assert calls[1][-1] == "no"
+    assert calls[2] == (
+        "connection",
+        "modify",
+        "uuid",
+        first,
+        "connection.autoconnect",
+        "yes",
+    )

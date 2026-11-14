@@ -9,7 +9,7 @@ import re
 import uuid
 
 from .errors import NetworkManagerError
-from .models import AccessPoint
+from .models import AccessPoint, WifiProfile
 
 _FREQUENCY_RE = re.compile(r"^(\d+)")
 _BSSID_RE = re.compile(r"^(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$")
@@ -80,8 +80,10 @@ class NetworkManagerClient:
             f"NetworkManager does not list Wi-Fi interface {interface!r}."
         )
 
-    async def find_autoconnecting_wifi_profiles(self, interface: str) -> list[str]:
-        """Return Wi-Fi profile names that could autoconnect to this interface."""
+    async def find_autoconnecting_wifi_profiles(
+        self, interface: str
+    ) -> list[WifiProfile]:
+        """Return Wi-Fi profiles that could autoconnect to this interface."""
         output = await self._run(
             "--terse",
             "--escape",
@@ -91,7 +93,7 @@ class NetworkManagerClient:
             "connection",
             "show",
         )
-        blocking: list[str] = []
+        blocking: list[WifiProfile] = []
         for line in output.splitlines():
             fields = _split_nmcli_fields(line)
             if len(fields) < 3:
@@ -128,8 +130,34 @@ class NetworkManagerClient:
             if autoconnect.casefold() == "no":
                 continue
             if profile_interface in {"", "--", interface}:
-                blocking.append(name or "unnamed profile")
+                blocking.append(
+                    WifiProfile(
+                        name=name or "unnamed profile",
+                        connection_uuid=str(uuid.UUID(connection_uuid)),
+                    )
+                )
         return blocking
+
+    async def set_profiles_autoconnect(
+        self, connection_uuids: list[str], enabled: bool
+    ) -> None:
+        """Temporarily change autoconnect only for the identified profiles."""
+        value = "yes" if enabled else "no"
+        for connection_uuid in connection_uuids:
+            try:
+                parsed_uuid = uuid.UUID(connection_uuid)
+            except ValueError as err:
+                raise NetworkManagerError(
+                    "A saved Wi-Fi profile has an invalid connection ID."
+                ) from err
+            await self._run(
+                "connection",
+                "modify",
+                "uuid",
+                str(parsed_uuid),
+                "connection.autoconnect",
+                value,
+            )
 
     async def set_managed(self, interface: str, managed: bool) -> None:
         """Allow or release an interface from NetworkManager control."""

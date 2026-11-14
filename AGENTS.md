@@ -26,7 +26,7 @@ These instructions apply to the whole repository.
 - Treat real Wi-Fi credentials, device keys, HomeKit setup codes, tokens, and raw setup payloads as secrets. Never copy real values from a device or user into logs, commits, fixtures, or errors; tests may use clearly synthetic dummy values only.
 - Do not persist the target Wi-Fi password. The device's local setup transport is not encrypted; explain this limitation and only send credentials to the explicitly selected Meross setup AP.
 - Any operation that pauses the user's access point must have a bounded timeout, a cancellation path, and a `finally`/recovery path that attempts to restore the original service.
-- Do not delete or overwrite an existing NetworkManager profile unless the operation has positively established that it is the temporary profile created by this app. If that cannot be established, fail safely and explain the limitation.
+- Do not delete an existing NetworkManager profile. The app may temporarily disable `connection.autoconnect` on profiles that could claim the AP interface, but only after journaling their UUIDs and with unconditional restoration on success, cancellation, timeout, and crash recovery. Full profile content and credentials must never be copied into the journal or logs.
 - Keep Supervisor permissions to the minimum supported role. Any permission needed to manage another app or the host network must be justified in the documentation and surfaced to the user.
 - The current AP backend uses `host_dbus` only for NetworkManager control. Do not add `host_network`, Docker API access, or Linux capabilities unless a tested requirement is documented.
 
